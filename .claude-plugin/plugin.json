@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "agent-supagents",
+  "description": "Compile a single AI supagent into multiple AI subagents.",
+  "author": {
+    "name": "Médéric Hurier",
+    "email": "github@fmind.dev",
+    "url": "https://fmind.dev"
+  },
+  "homepage": "https://github.com/fmind/agent-supagents",
+  "repository": "https://github.com/fmind/agent-supagents",
+  "license": "MIT",
+  "keywords": [
+    "agent-skills",
+    "agentic-coding",
+    "claude-code",
+    "cursor",
+    "gemini-cli",
+    "github-copilot",
+    "kilo-code",
+    "opencode",
+    "subagent"
+  ]
+}

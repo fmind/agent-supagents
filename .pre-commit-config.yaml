@@ -1,0 +1,35 @@
+# https://pre-commit.com/
+default_language_version:
+  python: python3.12
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-added-large-files
+        args: ["--maxkb=1000"]
+      - id: check-ast
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: check-symlinks
+      - id: check-toml
+      - id: check-yaml
+      - id: debug-statements
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+      - id: trailing-whitespace
+  - repo: local
+    hooks:
+      - id: lint
+        name: lint
+        entry: uv run just lint
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: test
+        name: test
+        entry: uv run just test
+        language: system
+        pass_filenames: false
+        always_run: true

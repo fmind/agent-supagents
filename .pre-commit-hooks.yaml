@@ -1,0 +1,7 @@
+- id: supagents-build
+  name: supagents build
+  description: Compile a single AI supagent into multiple AI subagents.
+  entry: supagents build
+  language: python
+  pass_filenames: false
+  files: ^(\.agents/supagents/|dot_agents/supagents/)[a-z0-9][a-z0-9_-]*\.md$

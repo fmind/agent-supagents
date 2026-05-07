@@ -1,0 +1,27 @@
+name: CD
+on:
+  release:
+    types: [published]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Verify tag matches
+        run: grep -qx 'version = "'"${GITHUB_REF_NAME#v}"'"' pyproject.toml
+      - name: Setup Uv
+        uses: astral-sh/setup-uv@v8
+        with:
+          enable-cache: true
+      - name: Build
+        run: uv build
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

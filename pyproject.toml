@@ -1,0 +1,141 @@
+# https://packaging.python.org/en/latest/specifications/pyproject-toml/
+[project]
+name = "supagents"
+version = "1.0.0"
+description = "Compile a single AI supagent into multiple AI subagents."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.12"
+authors = [{ name = "Médéric Hurier (Fmind)", email = "github@fmind.dev" }]
+keywords = [
+  "agent",
+  "claude-code",
+  "cursor",
+  "gemini-cli",
+  "github-copilot",
+  "kilo-code",
+  "markdown",
+  "opencode",
+  "subagent",
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Software Development :: Code Generators",
+  "Topic :: Software Development :: Build Tools",
+]
+dependencies = [
+  "pydantic>=2.13",
+  "rich>=15.0",
+  "ruamel.yaml>=0.19",
+  "typer>=0.25",
+]
+
+[project.scripts]
+supagents = "supagents.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/fmind/agent-supagents"
+Repository = "https://github.com/fmind/agent-supagents"
+Issues = "https://github.com/fmind/agent-supagents/issues"
+
+[dependency-groups]
+dev = [
+  "pre-commit>=4.6",
+  "pytest>=9.0",
+  "pytest-cov>=7.1",
+  "ruff>=0.15",
+  "rust-just>=1.50",
+  "ty>=0.0.34",
+  "validate-pyproject>=0.25",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/supagents"]
+
+[tool.coverage.run]
+branch = true
+source = ["src/supagents"]
+omit = ["src/supagents/__main__.py"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+skip_empty = true
+fail_under = 90
+
+[tool.pytest.ini_options]
+addopts = ["-ra", "--strict-markers", "--strict-config", "--cov"]
+testpaths = ["tests"]
+
+[tool.ty.src]
+include = ["src/supagents", "tests"]
+
+[tool.ty.rules]
+unused-ignore-comment = "error"
+unused-type-ignore-comment = "error"
+
+[tool.ty.analysis]
+allowed-unresolved-imports = ["ruamel.**"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.format]
+docstring-code-format = true
+
+[tool.ruff.lint]
+select = [
+  "A",    # flake8-builtins
+  "ANN",  # flake8-annotations
+  "B",    # flake8-bugbear
+  "BLE",  # flake8-blind-except
+  "C4",   # flake8-comprehensions
+  "E",    # pycodestyle errors
+  "F",    # Pyflakes
+  "FLY",  # flynt (f-string migration)
+  "FURB", # refurb
+  "I",    # isort
+  "ISC",  # flake8-implicit-str-concat
+  "LOG",  # flake8-logging
+  "N",    # pep8-naming
+  "PERF", # perflint
+  "PGH",  # pygrep-hooks
+  "PIE",  # flake8-pie
+  "PT",   # flake8-pytest-style
+  "PTH",  # flake8-use-pathlib
+  "RET",  # flake8-return
+  "RSE",  # flake8-raise
+  "RUF",  # Ruff-specific
+  "S",    # flake8-bandit
+  "SIM",  # flake8-simplify
+  "SLF",  # flake8-self
+  "T10",  # flake8-debugger
+  "T20",  # flake8-print
+  "TRY",  # tryceratops
+  "UP",   # pyupgrade
+  "W",    # pycodestyle warnings
+  "YTT",  # flake8-2020
+]
+ignore = [
+  "ANN401", # any-type
+  "TRY003", # long messages outside exception classes
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = [
+  "ANN",    # type annotations not required in tests
+  "S101",   # assert
+  "S108",   # tmp paths
+  "SLF001", # private member access OK in tests
+]

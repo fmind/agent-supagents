@@ -1,0 +1,5 @@
+{
+  "name": "agent-supagents",
+  "version": "1.0.0",
+  "description": "Compile a single AI supagent into multiple AI subagents."
+}
