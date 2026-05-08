@@ -1,5 +1,3 @@
-![supagents — compile one AI supagent into multiple AI subagents](image.jpeg)
-
 # supagents
 
 > **Compile a single AI supagent into multiple AI subagents.**
@@ -17,6 +15,8 @@ Supagents is a small Python CLI that compiles a single markdown file into target
 [Cursor]: https://cursor.com/docs/subagents
 [OpenCode]: https://opencode.ai/docs/agents/
 [Kilo Code]: https://kilo.ai/docs/customize/custom-subagents
+
+![supagents — compile one AI supagent into multiple AI subagents](image.jpeg)
 
 ## Why
 
