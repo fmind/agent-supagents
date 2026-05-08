@@ -1,3 +1,5 @@
+![supagents — compile one AI supagent into multiple AI subagents](image.jpeg)
+
 # supagents
 
 > **Compile a single AI supagent into multiple AI subagents.**
