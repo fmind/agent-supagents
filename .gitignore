@@ -8,3 +8,12 @@ __pycache__/
 build/
 dist/
 htmlcov/
+
+# Local agent compile outputs
+.agents/
+.claude/
+.cursor/
+.gemini/
+.github/agents/
+.kilo/
+
