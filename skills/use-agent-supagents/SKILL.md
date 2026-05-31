@@ -1,6 +1,9 @@
 ---
 name: use-agent-supagents
 description: Use when authoring or building supagents sources under .agents/supagents/ — markdown that compiles to subagent files for Claude Code, Gemini CLI, GitHub Copilot, Cursor, OpenCode, and Kilo Code.
+metadata:
+  author: fmind
+  url: https://github.com/fmind/agent-supagents/tree/main/skills/use-agent-supagents
 ---
 
 # use-agent-supagents
