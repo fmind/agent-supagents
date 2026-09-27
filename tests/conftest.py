@@ -24,6 +24,7 @@ def isolated_home(
     """Redirect ``$HOME`` to a unique temp dir so tests never write to the real home."""
     home = tmp_path_factory.mktemp("home")
     monkeypatch.setenv("HOME", str(home))
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
     monkeypatch.setenv("USERPROFILE", str(home))  # Windows fallback used by expanduser
     return home
 

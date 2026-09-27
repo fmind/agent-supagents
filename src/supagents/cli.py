@@ -52,6 +52,12 @@ ConfigOpt = Annotated[
         help="Path to a supagents config file (default: $XDG_CONFIG_HOME/supagents/config.yaml).",
     ),
 ]
+SourceOpt = Annotated[
+    Path | None,
+    typer.Option(
+        "--source-dir", help="Override the source directory; scope still selects outputs."
+    ),
+]
 ForceOpt = Annotated[
     bool, typer.Option("--force", "-f", help="Overwrite the file if it already exists.")
 ]
@@ -62,14 +68,16 @@ _INIT_TEMPLATE = """\
 name: {name}
 description: TODO — describe when this agent should be invoked.
 CLAUDE:
-  model: sonnet
-  tools: Read, Write, Edit, Bash, Glob, Grep
+  model: inherit
 GEMINI:
   kind: local
   tools: ["*"]
-COPILOT:
-  target: vscode
-  model: ["gpt-5", "gpt-4.1"]
+AGY:
+  subagent: true
+  model: inherit
+CODEX: {{}}
+GROK: {{}}
+COPILOT: {{}}
 CURSOR:
   model: inherit
   readonly: false
@@ -148,6 +156,7 @@ def build_command(
     verbose: VerboseOpt = False,
     target: TargetOpt = None,
     config_path: ConfigOpt = None,
+    source_dir: SourceOpt = None,
 ) -> None:
     """Compile sources to target outputs."""
     if dry_run and check:
@@ -157,7 +166,9 @@ def build_command(
     targets = _resolve_targets(target, config)
     no_write = dry_run or check
     try:
-        summary = core.build(scope=scope, config=config, dry_run=no_write, targets=targets)
+        summary = core.build(
+            scope=scope, config=config, dry_run=no_write, targets=targets, source_dir=source_dir
+        )
     except core.DuplicateSourceError as e:
         stderr.print(f"[red]ERROR[/]: {e}")
         raise typer.Exit(1) from None
@@ -182,7 +193,7 @@ def build_command(
         f"[bold]Summary[/]: "
         f"{len(summary.written)} {summary_verb}, "
         f"{len(summary.skipped_unchanged)} unchanged, "
-        f"{len(summary.fatal_errors)} errors"
+        f"{len(summary.fatal_errors) + summary.error_count} errors"
     )
 
     if summary.fatal_errors:
@@ -200,12 +211,17 @@ def clean_command(
     dry_run: DryRunOpt = False,
     target: TargetOpt = None,
     config_path: ConfigOpt = None,
+    source_dir: SourceOpt = None,
 ) -> None:
     """Remove orphaned outputs (marker-bearing files no longer produced)."""
     config = _load_config(config_path)
     scope = _resolve_scope(global_, project)
     targets = _resolve_targets(target, config)
-    orphans = core.find_orphans(scope, config, targets=targets)
+    try:
+        orphans = core.find_orphans(scope, config, targets=targets, source_dir=source_dir)
+    except (core.ParseError, core.DuplicateSourceError) as e:
+        stderr.print(f"[red]ERROR[/]: {e}")
+        raise typer.Exit(2) from None
     if not orphans:
         stdout.print("[dim]Nothing to clean.[/]")
         return
@@ -230,6 +246,7 @@ def init_command(
     global_: GlobalOpt = False,
     project: ProjectOpt = False,
     force: ForceOpt = False,
+    source_dir: SourceOpt = None,
 ) -> None:
     """Scaffold a new source file with target boilerplate."""
     stem = name.removesuffix(".md")
@@ -238,14 +255,20 @@ def init_command(
             f"name {name!r} must match ^[a-z0-9][a-z0-9_-]*$ (lowercase letters, digits, '-_')."
         )
     scope = _resolve_scope(global_, project)
-    root = source_root(scope)
+    root = source_dir or source_root(scope)
     target_path = root / f"{stem}.md"
+    if target_path.is_symlink():
+        stderr.print(f"[red]ERROR[/]: refusing to replace a symlink: {target_path}")
+        raise typer.Exit(1)
     if target_path.exists() and not force:
         stderr.print(f"[red]ERROR[/]: {target_path} already exists. Use --force to overwrite.")
         raise typer.Exit(1)
     title = stem.replace("-", " ").replace("_", " ").title()
-    root.mkdir(parents=True, exist_ok=True)
-    target_path.write_text(_INIT_TEMPLATE.format(name=stem, title=title), encoding="utf-8")
+    try:
+        core.atomic_write(target_path, _INIT_TEMPLATE.format(name=stem, title=title))
+    except OSError as e:
+        stderr.print(f"[red]ERROR[/]: could not initialize {target_path}: {e}")
+        raise typer.Exit(2) from e
     stdout.print(f"[green]created[/] {target_path}")
 
 
@@ -255,15 +278,18 @@ def list_command(
     project: ProjectOpt = False,
     target: TargetOpt = None,
     config_path: ConfigOpt = None,
+    source_dir: SourceOpt = None,
 ) -> None:
     """List defined sources and the outputs each would produce."""
     config = _load_config(config_path)
     scope = _resolve_scope(global_, project)
     targets = _resolve_targets(target, config)
     cwd = Path.cwd()
-    sources, fatal_errors = core.collect_sources(scope, config, cwd)
+    sources, fatal_errors = core.collect_sources(scope, config, cwd, source_dir)
     for path, msg in fatal_errors:
         stderr.print(f"[red]ERROR[/] {path}: {msg}")
+    if fatal_errors:
+        raise typer.Exit(2)
     if not sources:
         stdout.print("[dim]No sources found.[/]")
         return
@@ -275,6 +301,13 @@ def list_command(
         for plan in core.plan_source(src, config, scope, cwd, targets):
             table.add_row(src.name, plan.target_name, str(plan.output_path))
     stdout.print(table)
+    for src in sources:
+        for message in src.warnings:
+            stderr.print(f"[yellow]WARN[/] {src.path}: {message}")
+        for message in src.errors:
+            stderr.print(f"[red]ERROR[/] {src.path}: {message}")
+    if any(src.errors for src in sources):
+        raise typer.Exit(1)
 
 
 if __name__ == "__main__":

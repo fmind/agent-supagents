@@ -1,0 +1,63 @@
+# :schema https://mise.jdx.dev/schema/mise.json
+# https://mise.jdx.dev/configuration.html
+[settings]
+lockfile = true
+lockfile_platforms = ["linux-x64", "macos-arm64"]
+
+[settings.task]
+run_auto_install = false
+quiet = true
+
+[task_config]
+dir = "{{config_root}}"
+
+[env]
+UV_PROJECT = "{{config_root}}"
+
+[tools]
+actionlint = "1.7.12"
+dprint = "0.57.4"
+lefthook = "2.1.14"
+python = "3.14.7"
+uv = "0.12.19"
+zizmor = "1.30.1"
+
+[tasks.all]
+description = "Format, check, audit, test, and build"
+run = ["mise run format", "mise run check", "mise run audit", "mise run test", "mise run build"]
+
+[tasks.install]
+description = "Install the locked tools, dependencies, and local hooks"
+run = ["mise install --locked", "uv sync --frozen", "lefthook install"]
+
+[tasks.format]
+run = ["uv run --frozen ruff check --fix .", "uv run --frozen ruff format .", "dprint fmt"]
+
+[tasks.check]
+run = [
+  "uv lock --check",
+  "uv run --frozen ruff format --check .",
+  "uv run --frozen ruff check .",
+  "uv run --frozen ty check",
+  "uv run --frozen validate-pyproject pyproject.toml",
+  "dprint check",
+  "actionlint",
+  "zizmor --offline .github/",
+]
+
+[tasks.test]
+run = "uv run --frozen pytest -q"
+
+[tasks.audit]
+description = "Audit locked Python dependencies for known vulnerabilities"
+run = "uv audit --preview-features audit-command --locked"
+
+[tasks.build]
+run = [
+  "uv build --out-dir dist --clear",
+  "uv run --isolated --no-project --with dist/supagents-*.whl supagents --version",
+]
+
+[tasks.upgrade]
+description = "Refresh dependencies; review tool pins against the workstation baseline"
+run = "uv lock --upgrade"

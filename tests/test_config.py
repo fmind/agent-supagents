@@ -18,14 +18,24 @@ from supagents.config import (
 
 
 def test_load_with_no_file_uses_defaults(tmp_path: Path) -> None:
-    config = Config.load(tmp_path / "nonexistent.yaml")
+    config = Config.load()
     assert set(config.targets) == set(DEFAULT_TARGETS)
     assert config.targets["CLAUDE"].filename_suffix == ".md"
     assert config.targets["COPILOT"].filename_suffix == ".agent.md"
 
 
-def test_default_targets_cover_all_six_bundled_clis() -> None:
-    assert set(DEFAULT_TARGETS) == {"CLAUDE", "GEMINI", "COPILOT", "CURSOR", "OPENCODE", "KILO"}
+def test_default_targets_cover_all_nine_bundled_clis() -> None:
+    assert set(DEFAULT_TARGETS) == {
+        "AGY",
+        "CLAUDE",
+        "CODEX",
+        "GEMINI",
+        "GROK",
+        "COPILOT",
+        "CURSOR",
+        "OPENCODE",
+        "KILO",
+    }
 
 
 @pytest.mark.parametrize(
@@ -71,25 +81,24 @@ def test_load_user_can_add_new_target(tmp_path: Path) -> None:
     assert config.targets["MYTOOL"].filename_suffix == ".md"
 
 
-def test_load_ignores_non_dict_top_level(tmp_path: Path) -> None:
+def test_load_rejects_non_dict_top_level(tmp_path: Path) -> None:
     cfg_file = tmp_path / "config.yaml"
     cfg_file.write_text("- a\n- b\n", encoding="utf-8")
-    config = Config.load(cfg_file)
-    assert set(config.targets) == set(DEFAULT_TARGETS)
+    with pytest.raises(ConfigError, match="mapping"):
+        Config.load(cfg_file)
 
 
-def test_load_ignores_target_value_that_is_not_dict(tmp_path: Path) -> None:
+def test_load_rejects_target_value_that_is_not_dict(tmp_path: Path) -> None:
     cfg_file = tmp_path / "config.yaml"
     cfg_file.write_text("targets:\n  claude: not-a-dict\n", encoding="utf-8")
-    config = Config.load(cfg_file)
-    # CLAUDE keeps its default values since "not-a-dict" was skipped.
-    assert config.targets["CLAUDE"].project_path == Path(".claude/agents")
+    with pytest.raises(ConfigError, match="mapping"):
+        Config.load(cfg_file)
 
 
 def test_load_rejects_unknown_top_level_key(tmp_path: Path) -> None:
     cfg_file = tmp_path / "config.yaml"
     cfg_file.write_text("unknown: oops\ntargets: {}\n", encoding="utf-8")
-    with pytest.raises(ValidationError):
+    with pytest.raises(ConfigError):
         Config.load(cfg_file)
 
 

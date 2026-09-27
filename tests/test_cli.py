@@ -5,8 +5,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from click.testing import Result
-from typer.testing import CliRunner
+from typer.testing import CliRunner, Result
 
 from supagents import core
 from supagents.cli import app
@@ -293,11 +292,14 @@ def test_init_scaffolds_source(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
         assert block in text, block
 
 
-def test_init_output_builds_six_targets(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_init_output_builds_nine_targets(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     _run(monkeypatch, tmp_path, "init", "reviewer", "--project")
     result = _run(monkeypatch, tmp_path, "build", "--project")
     assert result.exit_code == 0, result.stdout
     expected = [
+        tmp_path / ".agents/agents/reviewer.md",
+        tmp_path / ".codex/agents/reviewer.toml",
+        tmp_path / ".grok/agents/reviewer.md",
         tmp_path / ".claude" / "agents" / "reviewer.md",
         tmp_path / ".gemini" / "agents" / "reviewer.md",
         tmp_path / ".github" / "agents" / "reviewer.agent.md",
@@ -372,5 +374,5 @@ def test_list_prints_fatal_errors(
 ) -> None:
     make_source("bad.md", "---\nname: bad: invalid: [\n---\nbody\n")
     result = _run(monkeypatch, tmp_path, "list", "--project")
-    assert result.exit_code == 0, result.stdout
+    assert result.exit_code == 2, result.stdout
     assert "ERROR" in (result.stderr or "")

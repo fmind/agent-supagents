@@ -2,11 +2,13 @@
 
 import os
 import re
+import stat
 import tempfile
 from copy import deepcopy
 from io import StringIO
 from pathlib import Path
 
+import tomli_w
 from pydantic import BaseModel, ConfigDict, Field, InstanceOf
 from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap
@@ -240,6 +242,9 @@ def has_marker(text: str) -> bool:
     Tolerates reformatting that moves the marker elsewhere within the
     frontmatter block (e.g. another tool sorting YAML keys).
     """
+    first = text.split("\n", 1)[0]
+    if first.startswith(MARKER_PREFIX) and first.endswith(MARKER_SUFFIX):
+        return True
     if not text.startswith("---\n"):
         return False
     for line in text.split("\n", 1)[1].split("\n"):
@@ -270,8 +275,19 @@ def compute_body(shared_body: str, append_body: str | None) -> str:
     return f"{shared_body.rstrip('\n')}\n\n{tail}"
 
 
-def render(rel_path: Path, frontmatter: CommentedMap, body: str) -> str:
+def render(
+    rel_path: Path, frontmatter: CommentedMap, body: str, target: TargetConfig | None = None
+) -> str:
     """Produce the full file contents for one output."""
+    if target is not None and target.format == "toml":
+        if target.body_key in frontmatter:
+            raise ParseError(f"{target.body_key!r} is reserved for the source body")
+        try:
+            data = dict(frontmatter)
+            data[target.body_key] = body.rstrip("\n") + "\n"
+            return marker_line(rel_path) + "\n" + tomli_w.dumps(data, multiline_strings=True)
+        except (TypeError, ValueError) as e:
+            raise ParseError(f"frontmatter cannot be represented as TOML: {e}") from e
     fm_text = dump_yaml(frontmatter) if frontmatter else ""
     return f"---\n{marker_line(rel_path)}\n{fm_text}---\n\n{body.rstrip('\n')}\n"
 
@@ -303,7 +319,7 @@ def would_change(path: Path, content: str) -> bool:
         return True
     try:
         return path.read_text(encoding="utf-8") != content
-    except OSError:
+    except (OSError, UnicodeError):
         return True
 
 
@@ -339,10 +355,12 @@ def atomic_write(path: Path, content: str) -> bool:
 
 
 def list_sources(root: Path) -> list[Path]:
-    """Return source ``.md`` files in ``root``, sorted by name."""
-    if not root.is_dir():
-        return []
-    return sorted(p for p in root.glob("*.md") if p.is_file())
+    """Enumerate sources without hiding filesystem failures or dangling links."""
+    return sorted(
+        path
+        for path in root.iterdir()
+        if path.suffix == ".md" and (path.is_symlink() or stat.S_ISREG(path.stat().st_mode))
+    )
 
 
 def plan_source(
@@ -358,11 +376,16 @@ def plan_source(
         if targets is not None and tname not in targets:
             continue
         target = config.targets[tname]
-        out_path = resolve_output_path(source, target, scope, cwd, block.output)
+        try:
+            out_path = resolve_output_path(source, target, scope, cwd, block.output)
+            resolved = out_path.resolve()
+        except (OSError, ValueError, RuntimeError) as e:
+            source.errors.append(f"{tname}: invalid output path: {e}")
+            continue
         if block.output is not None:
             root = _scope_root(scope, cwd)
             try:
-                out_path.resolve().relative_to(root.expanduser().resolve())
+                resolved.relative_to(root.expanduser().resolve())
             except ValueError:
                 source.warnings.append(
                     f"target {tname!r} OUTPUT {block.output!r} resolves outside "
@@ -370,31 +393,52 @@ def plan_source(
                 )
         fm = compute_frontmatter(source.shared_frontmatter, block.frontmatter)
         body = compute_body(source.body, block.append_body)
+        if tname == "CODEX" and any(
+            not isinstance(fm.get(key), str) or not fm[key].strip()
+            for key in ("name", "description")
+        ):
+            source.errors.append("CODEX requires non-empty name and description strings")
+            continue
+        try:
+            rendered = render(source.rel_path, fm, body, target)
+        except ParseError as e:
+            source.errors.append(f"{tname}: {e}")
+            continue
         plans.append(
             Plan(
                 source=source,
                 target_name=tname,
                 target=target,
                 output_path=out_path,
-                rendered=render(source.rel_path, fm, body),
+                rendered=rendered,
             )
         )
     return plans
 
 
 def collect_sources(
-    scope: Scope, config: Config, cwd: Path
+    scope: Scope, config: Config, cwd: Path, source_dir: Path | None = None
 ) -> tuple[list[Source], list[tuple[Path, str]]]:
     """Parse every source in ``scope``. Returns ``(sources, fatal_errors)``."""
-    root = source_root(scope, cwd)
+    root = source_dir or source_root(scope, cwd)
+    if source_dir is not None and not root.is_dir():
+        return [], [(root, "source directory does not exist")]
     sources: list[Source] = []
     fatal_errors: list[tuple[Path, str]] = []
     seen: dict[str, Path] = {}
     known_targets = set(config.targets)
-    for path in list_sources(root):
+    try:
+        paths = list_sources(root)
+    except FileNotFoundError as e:
+        if source_dir is None and not root.exists() and not root.is_symlink():
+            return [], []
+        return [], [(root, str(e))]
+    except OSError as e:
+        return [], [(root, str(e))]
+    for path in paths:
         try:
             src = parse_source(path, root, known_targets)
-        except ParseError as e:
+        except (ParseError, OSError, UnicodeError) as e:
             fatal_errors.append((path, str(e)))
             continue
         if src.name in seen:
@@ -412,6 +456,7 @@ def build(
     cwd: Path | None = None,
     dry_run: bool = False,
     targets: set[str] | None = None,
+    source_dir: Path | None = None,
 ) -> BuildSummary:
     """Run the build for all sources in ``scope``.
 
@@ -421,20 +466,46 @@ def build(
     config = config or Config.load()
     cwd = cwd or Path.cwd()
     summary = BuildSummary()
-    summary.sources, summary.fatal_errors = collect_sources(scope, config, cwd)
+    summary.sources, summary.fatal_errors = collect_sources(scope, config, cwd, source_dir)
 
     for src in summary.sources:
-        for plan in plan_source(src, config, scope, cwd, targets):
-            summary.plans.append(plan)
+        summary.plans.extend(plan_source(src, config, scope, cwd, targets))
+    # Validate the complete plan before changing anything. A marker establishes
+    # generator ownership, not a security boundary against a concurrent writer.
+    outputs: set[Path] = set()
+    inputs = {src.path.resolve() for src in summary.sources}
+    for plan in summary.plans:
+        path = plan.output_path
+        resolved = path.resolve()
+        problem = None
+        if resolved in inputs:
+            problem = "output would overwrite a source"
+        elif resolved in outputs:
+            problem = "multiple outputs resolve to the same path"
+        elif path.is_symlink():
+            problem = "refusing to replace a symlink"
+        elif path.exists():
             try:
-                if dry_run:
-                    changed = would_change(plan.output_path, plan.rendered)
-                else:
-                    changed = atomic_write(plan.output_path, plan.rendered)
-            except OSError as e:
-                summary.fatal_errors.append((plan.output_path, f"write failed: {e}"))
-                continue
-            (summary.written if changed else summary.skipped_unchanged).append(plan.output_path)
+                if not has_marker(path.read_text(encoding="utf-8")):
+                    problem = "refusing to overwrite a file not generated by supagents"
+            except (OSError, UnicodeError):
+                problem = "existing output is not a readable UTF-8 file"
+        outputs.add(resolved)
+        if problem:
+            summary.fatal_errors.append((path, problem))
+    if summary.fatal_errors or summary.error_count:
+        return summary
+    for plan in summary.plans:
+        try:
+            changed = (
+                would_change(plan.output_path, plan.rendered)
+                if dry_run
+                else atomic_write(plan.output_path, plan.rendered)
+            )
+        except OSError as e:
+            summary.fatal_errors.append((plan.output_path, f"write failed: {e}"))
+            break
+        (summary.written if changed else summary.skipped_unchanged).append(plan.output_path)
     return summary
 
 
@@ -443,17 +514,24 @@ def find_orphans(
     config: Config | None = None,
     cwd: Path | None = None,
     targets: set[str] | None = None,
+    source_dir: Path | None = None,
 ) -> list[Path]:
     """Marker-bearing output files for which no source still produces an output."""
     config = config or Config.load()
     cwd = cwd or Path.cwd()
-    sources, _ = collect_sources(scope, config, cwd)
+    # Cleanup requires an existing, readable source directory. Missing inputs
+    # cannot establish that the user deliberately removed every source.
+    sources, errors = collect_sources(scope, config, cwd, source_dir or source_root(scope, cwd))
+    if errors:
+        raise ParseError("cannot clean while sources are unreadable or invalid")
     expected = {
         plan.output_path.resolve()
         for src in sources
         for plan in plan_source(src, config, scope, cwd, targets)
     }
 
+    if any(src.errors or src.warnings for src in sources):
+        raise ParseError("cannot clean while sources have errors or warnings")
     orphans: list[Path] = []
     for tname, target in config.targets.items():
         if targets is not None and tname not in targets:
@@ -462,11 +540,11 @@ def find_orphans(
         if not out_dir.is_dir():
             continue
         for candidate in sorted(out_dir.glob(f"*{target.filename_suffix}")):
-            if not candidate.is_file():
+            if candidate.is_symlink() or not candidate.is_file():
                 continue
             try:
                 content = candidate.read_text(encoding="utf-8")
-            except OSError:
+            except (OSError, UnicodeError):
                 continue
             if has_marker(content) and candidate.resolve() not in expected:
                 orphans.append(candidate)
