@@ -16,8 +16,9 @@ app = typer.Typer(
     help="Maintain shared subagent instructions and generate native coding-tool configurations.",
 )
 
-stdout = Console()
-stderr = Console(stderr=True)
+# Let the terminal wrap visually without inserting newlines into paths or logs.
+stdout = Console(soft_wrap=True)
+stderr = Console(stderr=True, soft_wrap=True)
 
 GlobalOpt = Annotated[
     bool, typer.Option("--global", "-g", help="Operate on global scope (~/.agents/supagents/).")
