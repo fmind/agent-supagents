@@ -100,10 +100,13 @@ def test_strict_build_rejects_warnings_before_writing(monkeypatch, tmp_path, mak
 
 
 def test_check_requires_existing_sources(monkeypatch, tmp_path):
+    tmp_path = tmp_path / ("long-directory-" * 8)
+    tmp_path.mkdir()
     monkeypatch.chdir(tmp_path)
     result = runner.invoke(app, ["check", "--project"])
     assert result.exit_code == 2, result.output
     assert "source directory does not exist" in result.stderr
+    assert str(tmp_path / ".agents/supagents") in result.stderr
     (tmp_path / ".agents/supagents").mkdir(parents=True)
     assert runner.invoke(app, ["check", "--project", "--strict"]).exit_code == 0
 
