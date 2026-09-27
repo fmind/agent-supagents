@@ -8,6 +8,10 @@ All notable changes to this project are documented in this file.
 
 - Add strict verification and clearer agent onboarding
 
+### 🐛 Bug Fixes
+
+- Preserve long paths and diagnostics in CLI output
+
 ## [1.3.0] - 2026-09-27
 
 ### 🚀 Features
