@@ -1,7 +1,7 @@
 # https://packaging.python.org/en/latest/specifications/pyproject-toml/
 [project]
 name = "supagents"
-version = "1.3.0"
+version = "1.4.0"
 description = "Maintain shared subagent instructions and generate native coding-tool configurations."
 readme = "README.md"
 license = "MIT"

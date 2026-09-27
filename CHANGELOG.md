@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## [1.4.0] - 2026-09-27
+
+### 🚀 Features
+
+- Add strict verification and clearer agent onboarding
+
 ## [1.3.0] - 2026-09-27
 
 ### 🚀 Features
