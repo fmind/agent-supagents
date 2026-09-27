@@ -10,7 +10,7 @@ supagents build --project
 supagents build --project --check
 ```
 
-The checkout contains the next **1.3.0** release candidate. Until it is published, install this checkout with `uv tool install .` or build a wheel with `mise run build` and install that artifact.
+Requires Python 3.12+. See the [changelog](https://github.com/fmind/agent-supagents/blob/main/CHANGELOG.md) for release changes.
 
 | Target     | Harness        | Project output                   |
 | ---------- | -------------- | -------------------------------- |
@@ -61,7 +61,7 @@ Only declared target blocks produce outputs. Supagents preserves the Markdown bo
 
 Use `--project` or `--global`, repeatable `--target`, `--config`, and `--source-dir` to select scope and locations. By default, a local `.agents/supagents/` selects project scope; otherwise the CLI uses `~/.agents/supagents/`.
 
-Builds refuse to overwrite handwritten files, symlinks, sources, or colliding outputs. Cleanup refuses invalid or ambiguous sources. See [usage and migration](docs/usage.md) for configuration precedence, safety limits, host references, and chezmoi integration.
+Builds refuse to overwrite handwritten files, symlinks, sources, or colliding outputs. Cleanup refuses invalid or ambiguous sources. See [usage and migration](https://github.com/fmind/agent-supagents/blob/main/docs/usage.md) for configuration precedence, safety limits, host references, and chezmoi integration.
 
 ## Development
 
@@ -73,6 +73,6 @@ mise run all
 
 Python 3.12+ is supported; mise pins the development toolchain and uv locks dependencies. CI qualifies Linux and macOS, with an additional Python 3.12 test run. The gate audits dependencies and smoke-tests the built wheel in an isolated environment. Lefthook calls the same check and test tasks. Local checks do not establish hosted CI or live harness delegation results.
 
-The repository also supplies an [Agent Skill](skills/use-agent-supagents/SKILL.md), Claude Code, Gemini CLI, and Copilot plugin manifests, and a downstream pre-commit hook. See [plugin installation](docs/usage.md#plugins-and-hooks).
+The repository also supplies an [Agent Skill](https://github.com/fmind/agent-supagents/blob/main/skills/use-agent-supagents/SKILL.md), Claude Code, Gemini CLI, and Copilot plugin manifests, and a downstream pre-commit hook. See [plugin installation](https://github.com/fmind/agent-supagents/blob/main/docs/usage.md#plugins-and-hooks).
 
-[MIT license](LICENSE).
+[MIT license](https://github.com/fmind/agent-supagents/blob/main/LICENSE).
