@@ -48,6 +48,10 @@ run = [
 [tasks.test]
 run = "uv run --frozen pytest -q"
 
+[tasks."check:hosts"]
+description = "Report installed host versions and synthetic agent discovery (no model calls)"
+run = "uv run --frozen python scripts/check_hosts.py"
+
 [tasks.audit]
 description = "Audit locked Python dependencies for known vulnerabilities"
 run = "uv audit --preview-features audit-command --locked"

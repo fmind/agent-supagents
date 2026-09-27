@@ -31,3 +31,5 @@
 - `.github/workflows/{ci,cd}.yml` — CI (lint + test on push/PR) and CD (qualified artifacts published after a GitHub release).
 - `mise.toml` / `mise.lock` — tools and canonical tasks; `lefthook.yml` — local hooks.
 - `docs/usage.md` — source format, native target references, configuration, and migration contracts.
+- `docs/compatibility.md` — versioned compiler/discovery evidence and runtime verification limits; refresh with `mise run check:hosts` when native profiles change.
+- `examples/reviewer.md` — portable reviewer source; `scripts/check_hosts.py` probes synthetic profile discovery without model calls or writes to installed profiles.

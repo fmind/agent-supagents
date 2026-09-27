@@ -2,7 +2,7 @@
 [project]
 name = "supagents"
 version = "1.3.0"
-description = "Compile a single AI supagent into multiple AI subagents."
+description = "Maintain shared subagent instructions and generate native coding-tool configurations."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -78,7 +78,7 @@ addopts = ["-ra", "--strict-markers", "--strict-config", "--cov"]
 testpaths = ["tests"]
 
 [tool.ty.src]
-include = ["src/supagents", "tests"]
+include = ["src/supagents", "tests", "scripts"]
 
 [tool.ty.rules]
 unused-ignore-comment = "error"

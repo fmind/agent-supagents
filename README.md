@@ -1,16 +1,17 @@
 # Supagents
 
-Define a role once, then compile it into native subagent profiles for nine coding harnesses. Keep instructions shared and model, tool, and permission settings explicit for each host.
+Maintain shared subagent instructions and generate native configurations for your coding tools. For developers using multiple harnesses, Supagents keeps roles in Git while preserving explicit model, tool, and permission settings for each host.
 
 ```bash
 uv tool install supagents
-supagents init reviewer --project
-# Edit .agents/supagents/reviewer.md: write the instructions and keep the desired target blocks.
-supagents build --project
-supagents build --project --check
+supagents init reviewer --project --target claude --target codex
+# Replace the scaffold with the reviewer source below.
+supagents build --project --diff
+supagents build --project --strict
+supagents check --project --strict
 ```
 
-Requires Python 3.12+. See the [changelog](https://github.com/fmind/agent-supagents/blob/main/CHANGELOG.md) for release changes.
+The final check reports `0 would change, 2 unchanged, 0 obsolete, 0 warnings, 0 errors`. Generation runs locally without model calls. Requires Python 3.12+. See the [changelog](https://github.com/fmind/agent-supagents/blob/main/CHANGELOG.md) for release changes.
 
 | Target     | Harness        | Project output                   |
 | ---------- | -------------- | -------------------------------- |
@@ -35,33 +36,33 @@ CLAUDE:
   tools: Read, Glob, Grep
 CODEX:
   sandbox_mode: read-only
-AGY:
-  subagent: true
-  model: inherit
-  inheritMcp: false
-  tools: [view_file, list_dir, find_by_name, grep_search]
 ---
 
 Read the assigned files and requirements. Return findings with file and line references, evidence, and unresolved gaps. Do not implement fixes or delegate further work.
 ```
 
+Save this source as `.agents/supagents/reviewer.md`. The [complete reviewer example](https://github.com/fmind/agent-supagents/blob/main/examples/reviewer.md) includes all nine targets; retain only those you use.
+
 Only declared target blocks produce outputs. Supagents preserves the Markdown body and merges shared metadata with each target's overrides; Codex receives the body as TOML `developer_instructions`. It does not translate tool names, permissions, or model IDs. Native settings and parent-session policies determine runtime behavior.
 
 ## Commands
 
-| Command           | Purpose                                                |
-| ----------------- | ------------------------------------------------------ |
-| `init NAME`       | Scaffold a source with all bundled targets             |
-| `build`           | Validate the complete plan, then write changed outputs |
-| `build --check`   | Fail if outputs differ; write nothing                  |
-| `build --dry-run` | Preview planned changes                                |
-| `list`            | Show source-to-output mappings                         |
-| `clean --dry-run` | Preview generated files no longer produced             |
-| `clean`           | Remove those orphaned files                            |
+| Command                                    | Purpose                                                                |
+| ------------------------------------------ | ---------------------------------------------------------------------- |
+| `init NAME --target claude --target codex` | Scaffold only selected targets                                         |
+| `build --diff`                             | Preview content changes and source-to-output mappings                  |
+| `build --strict`                           | Reject warnings before writing changed outputs                         |
+| `check --strict`                           | Fail on missing, modified, obsolete outputs or warnings; write nothing |
+| `list`                                     | Show source-to-output mappings                                         |
+| `clean --dry-run`                          | Preview obsolete generated files before `clean` removes them           |
+
+`init` without `--target` includes all bundled targets. `build --check` remains an alias for the read-only check, and `--dry-run` previews paths without content diffs.
 
 Use `--project` or `--global`, repeatable `--target`, `--config`, and `--source-dir` to select scope and locations. By default, a local `.agents/supagents/` selects project scope; otherwise the CLI uses `~/.agents/supagents/`.
 
-Builds refuse to overwrite handwritten files, symlinks, sources, or colliding outputs. Cleanup refuses invalid or ambiguous sources. See [usage and migration](https://github.com/fmind/agent-supagents/blob/main/docs/usage.md) for configuration precedence, safety limits, host references, and chezmoi integration.
+Commands display the selected scope and source directory. Builds refuse to overwrite handwritten files, symlinks, sources, or colliding outputs. Cleanup refuses invalid or ambiguous sources. See [usage and migration](https://github.com/fmind/agent-supagents/blob/main/docs/usage.md) for configuration precedence, safety limits, host references, and chezmoi integration.
+
+See the [compatibility evidence](https://github.com/fmind/agent-supagents/blob/main/docs/compatibility.md) for tested host versions, discovery results, and runtime limits.
 
 ## Development
 

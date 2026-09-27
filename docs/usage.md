@@ -59,10 +59,27 @@ Keep canonical sources in `dot_agents/supagents/`. Use a repository-only config 
 
 ```bash
 supagents build --project --source-dir dot_agents/supagents --config supagents.yaml
-supagents build --project --source-dir dot_agents/supagents --config supagents.yaml --check
+supagents check --strict --project --source-dir dot_agents/supagents --config supagents.yaml
 ```
 
 Exclude `supagents.yaml` from chezmoi deployment. Keep generated native files tracked and exempt them from other formatters; use the second command as a repository gate. Preview and apply the affected targets through chezmoi. Generation should not run as an installation hook or write directly into the deployed home while editing the source repository.
+
+## Verification and previews
+
+```bash
+supagents init reviewer --project --target claude --target codex
+supagents build --project --diff
+supagents build --project --strict
+supagents check --project --strict --diff
+```
+
+`init --target` is repeatable and case-insensitive, accepts custom targets from `--config`, and rejects unknown target names. With no target filter it retains the nine bundled targets for compatibility. Scaffolds contain TODO instructions; use the [reviewer example](../examples/reviewer.md) as a practical starting point and retain the targets you need.
+
+`build --diff` previews additions and edits as unified content diffs, without writing. `check --diff` also previews obsolete files as removals; it never removes them. `--diff` can accompany `--dry-run` or `--check`. Every command reports explicit or auto-detected scope and the source directory; previews show source → target → output mappings.
+
+`check` and `build --check` both fail on missing, modified, or obsolete generated outputs. `--strict` additionally fails on source warnings, including unknown target/directive names. `build --strict` rejects warnings before any writes. A warning during a non-strict check skips orphan scanning because ownership is ambiguous; use `check --strict` in CI. Checks require an existing source directory, even with default paths; an empty existing directory is valid.
+
+Orphan checks and cleanup inspect marker-bearing regular files directly in the selected targets' configured output directories. They cannot locate old directories after configuration changes or obsolete custom `OUTPUT` paths elsewhere. Unreadable output directories/files fail the scan. Handwritten files and symlinks are preserved. Missing or modified expected outputs are checked wherever their current `OUTPUT` points.
 
 ## Safety and migration from 1.2
 
@@ -74,11 +91,11 @@ Only marker-bearing generated files can be replaced. An existing handwritten fil
 
 `init` refuses source symlinks even with `--force` and replaces regular files atomically. Invalid output paths and filesystem errors produce CLI diagnostics instead of tracebacks.
 
-Build exits 0 on success, 1 for target errors or `--check` drift, and 2 for fatal source/configuration/I/O errors. `list` now fails for invalid sources. Invalid configuration shapes no longer silently fall back to defaults. An unknown target is still a build warning to preserve extensibility; review warnings before deployment.
+Build/check exit 0 on success, 1 for target errors, check drift, or warnings with `--strict`, and 2 for fatal source/configuration/I/O errors. Since 1.4, `build --check` also rejects obsolete outputs and missing source directories; use `clean --dry-run` to review obsolete files before cleanup. `list` now fails for invalid sources. Invalid configuration shapes no longer silently fall back to defaults. An unknown source target is a warning unless `--strict` is selected; an unknown CLI `--target` is always an error.
 
 ## Native behavior and verification
 
-Use host documentation for fields and discovery: [Antigravity](https://antigravity.google/docs/subagents/), [Claude Code](https://code.claude.com/docs/en/sub-agents), [Codex](https://learn.chatgpt.com/docs/agent-configuration/subagents), [Copilot](https://docs.github.com/en/copilot/reference/custom-agents-configuration), [Cursor](https://cursor.com/docs/subagents), [Gemini CLI](https://geminicli.com/docs/core/subagents/), [Grok Build](https://docs.x.ai/build/features/subagents), [Kilo Code](https://kilo.ai/docs/customize/custom-subagents), and [OpenCode](https://opencode.ai/docs/agents/).
+The [compatibility matrix](compatibility.md) records tested versions and separates compiler, discovery, and permission evidence. Use host documentation for fields and discovery: [Antigravity](https://antigravity.google/docs/subagents/), [Claude Code](https://code.claude.com/docs/en/sub-agents), [Codex](https://learn.chatgpt.com/docs/agent-configuration/subagents), [Copilot](https://docs.github.com/en/copilot/reference/custom-agents-configuration), [Cursor](https://cursor.com/docs/subagents), [Gemini CLI](https://geminicli.com/docs/core/subagents/), [Grok Build](https://docs.x.ai/build/features/subagents), [Kilo Code](https://kilo.ai/docs/customize/custom-subagents), and [OpenCode](https://opencode.ai/docs/agents/).
 
 Avoid pinning models unless the task needs one. Omission or `inherit` is host-specific. Tool allowlists use native names; shell access can write files even if the edit tool is absent. Codex sandbox defaults can be overridden by parent runtime policy. Agent instructions alone are not access control.
 

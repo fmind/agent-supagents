@@ -6,16 +6,16 @@ license: MIT
 
 # Use Supagents
 
-Read [usage and configuration](../../docs/usage.md) for target paths, precedence, and migration rules. Use Supagents to share role instructions while keeping model, tool, and permission settings explicit for each harness.
+Read [compatibility evidence](../../docs/compatibility.md) for tested host versions and limits. Read [usage and configuration](../../docs/usage.md) for target paths, precedence, and migration rules. Use Supagents to share role instructions while keeping model, tool, and permission settings explicit for each harness.
 
 ## Workflow
 
 1. Inspect existing sources, generated outputs, Git status, and installed harness versions. Preserve handwritten profiles and unrelated work.
-1. Select project (`.agents/supagents/`) or global (`~/.agents/supagents/`) scope. Use `supagents init NAME --project` to scaffold a source; keep only needed uppercase target blocks.
+1. Select project (`.agents/supagents/`) or global (`~/.agents/supagents/`) scope. Use `supagents init NAME --project --target claude --target codex` to scaffold selected targets; adapt the target list to the installed hosts.
 1. Write a bounded role: task inputs, responsibilities, allowed actions, handoff format, and stop conditions. Read the relevant host's current documentation before setting native metadata.
 1. Keep shared `name` and `description` fields and the Markdown body portable. Put model choices, tool allowlists, permissions, and other host settings in their target blocks. Omit model overrides unless requested or required by the task.
-1. Preview with `supagents build --project --dry-run`; inspect warnings and output mappings. For custom layouts pass `--source-dir PATH --config FILE` consistently.
-1. Generate with `supagents build --project`; verify idempotence with `supagents build --project --check`. Invalid source/configuration, collisions, and unowned outputs must be fixed before generating.
+1. Preview with `supagents build --project --diff`; inspect warnings and output mappings. For custom layouts pass `--source-dir PATH --config FILE` consistently.
+1. Generate with `supagents build --project --strict`; verify expected and obsolete outputs with `supagents check --project --strict`. Invalid source/configuration, collisions, and unowned outputs must be fixed before generating.
 1. Confirm native discovery in each installed host, then run a bounded runtime task when authorized. Report compilation, discovery, and runtime results separately.
 
 ## Native formats
