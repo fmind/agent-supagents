@@ -1,4 +1,4 @@
-"""Compile a single AI supagent into multiple AI subagents."""
+"""Maintain shared subagent instructions and generate native coding-tool configurations."""
 
 from importlib.metadata import version
 

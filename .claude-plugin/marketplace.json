@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
   "name": "agent-supagents",
-  "description": "Compile a single AI supagent into multiple AI subagents.",
+  "description": "Maintain shared subagent instructions and generate native coding-tool configurations.",
   "owner": {
     "name": "Médéric Hurier",
     "email": "github@fmind.dev"
@@ -10,7 +10,7 @@
     {
       "name": "agent-supagents",
       "source": "./",
-      "description": "Compile a single AI supagent into multiple AI subagents.",
+      "description": "Maintain shared subagent instructions and generate native coding-tool configurations.",
       "author": {
         "name": "Médéric Hurier",
         "email": "github@fmind.dev",

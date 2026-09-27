@@ -5,6 +5,7 @@ import re
 import stat
 import tempfile
 from copy import deepcopy
+from difflib import unified_diff
 from io import StringIO
 from pathlib import Path
 
@@ -88,11 +89,16 @@ class BuildSummary(BaseModel):
     plans: list[Plan] = Field(default_factory=list)
     written: list[Path] = Field(default_factory=list)
     skipped_unchanged: list[Path] = Field(default_factory=list)
+    orphans: list[Path] = Field(default_factory=list)
     fatal_errors: list[tuple[Path, str]] = Field(default_factory=list)
 
     @property
     def error_count(self) -> int:
         return sum(1 for s in self.sources if s.errors)
+
+    @property
+    def warning_count(self) -> int:
+        return sum(len(s.warnings) for s in self.sources)
 
 
 def dump_yaml(data: CommentedMap) -> str:
@@ -323,6 +329,21 @@ def would_change(path: Path, content: str) -> bool:
         return True
 
 
+def output_diff(path: Path, content: str) -> str:
+    """Preview an addition, edit, or removal without changing the filesystem."""
+    exists = path.exists()
+    previous = path.read_text(encoding="utf-8") if exists else ""
+    lines = unified_diff(
+        previous.splitlines(keepends=True),
+        content.splitlines(keepends=True),
+        fromfile=str(path) if exists else "/dev/null",
+        tofile=str(path) if content else "/dev/null",
+    )
+    return "".join(
+        line if line.endswith("\n") else line + "\n\\ No newline at end of file\n" for line in lines
+    )
+
+
 def atomic_write(path: Path, content: str) -> bool:
     """Write ``content`` to ``path`` atomically. Return True if the file changed."""
     if not would_change(path, content):
@@ -457,6 +478,7 @@ def build(
     dry_run: bool = False,
     targets: set[str] | None = None,
     source_dir: Path | None = None,
+    strict: bool = False,
 ) -> BuildSummary:
     """Run the build for all sources in ``scope``.
 
@@ -493,7 +515,7 @@ def build(
         outputs.add(resolved)
         if problem:
             summary.fatal_errors.append((path, problem))
-    if summary.fatal_errors or summary.error_count:
+    if summary.fatal_errors or summary.error_count or (strict and summary.warning_count):
         return summary
     for plan in summary.plans:
         try:
@@ -507,6 +529,76 @@ def build(
             break
         (summary.written if changed else summary.skipped_unchanged).append(plan.output_path)
     return summary
+
+
+def check(
+    scope: Scope,
+    config: Config | None = None,
+    cwd: Path | None = None,
+    targets: set[str] | None = None,
+    source_dir: Path | None = None,
+) -> BuildSummary:
+    """Check expected outputs and configured directories for drift without writes.
+
+    Require existing sources so a missing checkout never passes a CI gate.
+    Orphan discovery is limited to the current configured output directories.
+    """
+    config = config or Config.load()
+    cwd = cwd or Path.cwd()
+    summary = build(
+        scope,
+        config,
+        cwd,
+        dry_run=True,
+        targets=targets,
+        source_dir=source_dir or source_root(scope, cwd),
+    )
+    if summary.fatal_errors or summary.error_count:
+        return summary
+    # Ambiguous sources cannot establish which outputs are obsolete. Ordinary
+    # checks report warnings; strict checks reject them at the CLI boundary.
+    if not summary.warning_count:
+        try:
+            summary.orphans = _scan_orphans(summary.sources, scope, config, cwd, targets)
+        except (OSError, ValueError, RuntimeError) as e:
+            summary.fatal_errors.append((source_dir or source_root(scope, cwd), str(e)))
+    return summary
+
+
+def _scan_orphans(
+    sources: list[Source], scope: Scope, config: Config, cwd: Path, targets: set[str] | None
+) -> list[Path]:
+    # Different targets may share a directory. A target filter narrows scanning,
+    # but must never classify another target's current output as obsolete.
+    expected = {
+        resolve_output_path(src, config.targets[name], scope, cwd, block.output).resolve()
+        for src in sources
+        for name, block in src.targets.items()
+    }
+    orphans: set[Path] = set()
+    for tname, target in config.targets.items():
+        if targets is not None and tname not in targets:
+            continue
+        out_dir = output_dir(target, scope, cwd)
+        try:
+            candidates = sorted(out_dir.iterdir())
+        except FileNotFoundError:
+            if out_dir.is_symlink():
+                raise
+            continue
+        for candidate in candidates:
+            if not candidate.name.endswith(target.filename_suffix) or candidate.is_symlink():
+                continue
+            if not stat.S_ISREG(candidate.stat().st_mode):
+                continue
+            try:
+                content = candidate.read_text(encoding="utf-8")
+            except UnicodeError:
+                # Binary files cannot contain a valid generated text header.
+                continue
+            if has_marker(content) and candidate.resolve() not in expected:
+                orphans.add(candidate)
+    return sorted(orphans)
 
 
 def find_orphans(
@@ -524,28 +616,12 @@ def find_orphans(
     sources, errors = collect_sources(scope, config, cwd, source_dir or source_root(scope, cwd))
     if errors:
         raise ParseError("cannot clean while sources are unreadable or invalid")
-    expected = {
-        plan.output_path.resolve()
-        for src in sources
-        for plan in plan_source(src, config, scope, cwd, targets)
-    }
+    for src in sources:
+        plan_source(src, config, scope, cwd, targets)
 
     if any(src.errors or src.warnings for src in sources):
         raise ParseError("cannot clean while sources have errors or warnings")
-    orphans: list[Path] = []
-    for tname, target in config.targets.items():
-        if targets is not None and tname not in targets:
-            continue
-        out_dir = output_dir(target, scope, cwd)
-        if not out_dir.is_dir():
-            continue
-        for candidate in sorted(out_dir.glob(f"*{target.filename_suffix}")):
-            if candidate.is_symlink() or not candidate.is_file():
-                continue
-            try:
-                content = candidate.read_text(encoding="utf-8")
-            except (OSError, UnicodeError):
-                continue
-            if has_marker(content) and candidate.resolve() not in expected:
-                orphans.append(candidate)
-    return orphans
+    try:
+        return _scan_orphans(sources, scope, config, cwd, targets)
+    except (OSError, ValueError, RuntimeError) as e:
+        raise ParseError(f"cannot inspect output directories: {e}") from e

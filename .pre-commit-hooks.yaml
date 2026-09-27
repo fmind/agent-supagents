@@ -1,7 +1,7 @@
 # https://pre-commit.com/#creating-new-hooks
 - id: supagents-build
   name: supagents build
-  description: Compile a single AI supagent into multiple AI subagents.
+  description: Maintain shared subagent instructions and generate native coding-tool configurations.
   entry: supagents build
   language: python
   pass_filenames: false
