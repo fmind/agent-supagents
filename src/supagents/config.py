@@ -19,7 +19,7 @@ import os
 from pathlib import Path
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 from ruamel.yaml import YAML
 from ruamel.yaml.error import YAMLError
 
@@ -52,9 +52,43 @@ class TargetConfig(BaseModel):
     global_path: Path
     project_path: Path
     filename_suffix: str = ".md"
+    format: Literal["markdown", "toml"] = "markdown"
+    body_key: str = "developer_instructions"
+
+    @field_validator("global_path", "project_path")
+    @classmethod
+    def _usable_path(cls, value: Path) -> Path:
+        if "\0" in str(value):
+            raise ValueError("output paths must not contain NUL characters")
+        try:
+            value.expanduser()
+        except RuntimeError as e:
+            raise ValueError("output path home directory cannot be expanded") from e
+        return value
+
+    @field_validator("filename_suffix")
+    @classmethod
+    def _safe_suffix(cls, value: str) -> str:
+        if not value.startswith(".") or any(c in value for c in "/\\*?[]\0"):
+            raise ValueError("filename_suffix must be an extension without separators or globs")
+        return value
 
 
 DEFAULT_TARGETS: dict[str, TargetConfig] = {
+    "AGY": TargetConfig(
+        global_path=Path("~/.gemini/config/agents"),
+        project_path=Path(".agents/agents"),
+    ),
+    "CODEX": TargetConfig(
+        global_path=Path("~/.codex/agents"),
+        project_path=Path(".codex/agents"),
+        filename_suffix=".toml",
+        format="toml",
+    ),
+    "GROK": TargetConfig(
+        global_path=Path("~/.grok/agents"),
+        project_path=Path(".grok/agents"),
+    ),
     "CLAUDE": TargetConfig(
         global_path=Path("~/.claude/agents"),
         project_path=Path(".claude/agents"),
@@ -103,24 +137,37 @@ class Config(BaseModel):
 
         Raises ``ConfigError`` if the file exists but cannot be parsed as YAML.
         """
+        if path is not None and not path.is_file():
+            raise ConfigError(f"config file does not exist: {path}")
         path = path or user_config_path()
         user: dict[str, object] = {}
         if path.is_file():
             try:
                 loaded = YAML(typ="safe").load(path.read_text(encoding="utf-8"))
-            except YAMLError as e:
+            except (YAMLError, OSError, UnicodeError) as e:
                 raise ConfigError(f"invalid YAML in {path}: {e}") from e
-            if isinstance(loaded, dict):
-                user = loaded
+            if loaded is not None and not isinstance(loaded, dict):
+                raise ConfigError(f"config must be a YAML mapping: {path}")
+            user = loaded or {}
 
         merged = {name: target.model_dump() for name, target in DEFAULT_TARGETS.items()}
         user_targets = user.get("targets")
+        if "targets" in user and not isinstance(user_targets, dict):
+            raise ConfigError("targets must be a mapping")
         if isinstance(user_targets, dict):
             for name, value in user_targets.items():
-                if isinstance(value, dict):
-                    key = str(name).upper()
-                    merged[key] = {**merged.get(key, {}), **value}
-        return cls.model_validate({**user, "targets": merged})
+                if not isinstance(name, str) or not isinstance(value, dict):
+                    raise ConfigError("targets require string names and mapping values")
+                key = name.upper()
+                merged[key] = {**merged.get(key, {}), **value}
+        try:
+            return cls.model_validate({**user, "targets": merged})
+        except ValidationError as e:
+            details = "; ".join(
+                f"{'.'.join(map(str, error['loc']))}: {error['msg']}"
+                for error in e.errors(include_input=False, include_url=False)
+            )
+            raise ConfigError(f"invalid config: {details}") from e
 
 
 def detect_scope(cwd: Path | None = None) -> Scope:

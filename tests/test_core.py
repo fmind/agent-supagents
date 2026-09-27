@@ -382,11 +382,12 @@ def test_build_unknown_target_does_not_block_known(
     assert any("FOO" in w for w in warnings)
 
 
-def test_build_malformed_skipped_others_succeed(mixed_workspace: Path) -> None:
+def test_build_malformed_blocks_all_writes(mixed_workspace: Path) -> None:
     summary = core.build(scope="project", cwd=mixed_workspace)
     assert any("malformed.md" in str(p) for p, _ in summary.fatal_errors)
-    assert (mixed_workspace / ".claude" / "agents" / "code_investigator.md").exists()
-    assert (mixed_workspace / ".claude" / "agents" / "claude_only.md").exists()
+    assert not summary.written
+    assert not (mixed_workspace / ".claude" / "agents" / "code_investigator.md").exists()
+    assert not (mixed_workspace / ".claude" / "agents" / "claude_only.md").exists()
 
 
 def test_build_output_directive_overrides_path(tmp_path: Path, make_source: MakeSource) -> None:

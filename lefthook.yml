@@ -1,0 +1,10 @@
+# https://lefthook.dev/configuration/
+output: [summary, failure, execution_out]
+pre-commit:
+  commands:
+    check:
+      run: mise run check
+pre-push:
+  commands:
+    test:
+      run: mise run test

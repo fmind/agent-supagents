@@ -16,3 +16,7 @@ htmlcov/
 .gemini/
 .github/agents/
 .kilo/
+
+.codex/
+.grok/
+.opencode/

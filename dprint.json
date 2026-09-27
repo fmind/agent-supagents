@@ -1,0 +1,24 @@
+{
+  "$schema": "https://dprint.dev/schemas/v0.json",
+  "lineWidth": 120,
+  "excludes": [
+    "uv.lock",
+    "mise.lock",
+    "**/.git",
+    "**/.venv",
+    "**/.pytest_cache",
+    "**/.ruff_cache",
+    "**/dist",
+    "**/htmlcov",
+    "tests/fixtures/**"
+  ],
+  "markdown": {
+    "textWrap": "never"
+  },
+  "plugins": [
+    "npm:dprint-plugin-yaml@0.6.0",
+    "npm:@dprint/json@0.24.0",
+    "npm:@dprint/markdown@0.24.0",
+    "npm:@dprint/toml@0.8.0"
+  ]
+}
