@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file.
 
+## [1.4.1] - 2026-10-06
+
+### 🐛 Bug Fixes
+
+- _(cli)_ Print paths and diagnostics verbatim
+
+### 🧹 Miscellaneous
+
+- _(deps)_ Upgrade mise tools to latest
+- _(deps)_ Upgrade python dependencies to latest
+- _(deps)_ Upgrade github actions to latest
+- _(deps)_ Upgrade dprint plugins to latest
+- Align metadata and task descriptions
+- Remove unreferenced hero image
+
 ## [1.4.0] - 2026-09-27
 
 ### 🚀 Features
