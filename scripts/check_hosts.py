@@ -32,7 +32,7 @@ def probe() -> bool:
         root.mkdir(parents=True)
         name = "supagents-compatibility-reviewer"
         (root / f"{name}.md").write_text(
-            example.read_text().replace("name: reviewer\n", f"name: {name}\n"),
+            example.read_text(encoding="utf-8").replace("name: reviewer\n", f"name: {name}\n"),
             encoding="utf-8",
         )
         built = core.build("project", cwd=project, strict=True)

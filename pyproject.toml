@@ -10,10 +10,13 @@ requires-python = ">=3.12"
 authors = [{ name = "Médéric Hurier (Fmind)", email = "github@fmind.dev" }]
 keywords = [
   "agent",
+  "antigravity",
   "claude-code",
+  "codex",
   "cursor",
   "gemini-cli",
   "github-copilot",
+  "grok",
   "kilo-code",
   "markdown",
   "opencode",

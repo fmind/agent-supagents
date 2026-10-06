@@ -31,9 +31,11 @@ description = "Install the locked tools, dependencies, and local hooks"
 run = ["mise install --locked", "uv sync --frozen", "lefthook install"]
 
 [tasks.format]
+description = "Fix lint and format Python, Markdown, JSON, TOML, and YAML"
 run = ["uv run --frozen ruff check --fix .", "uv run --frozen ruff format .", "dprint fmt"]
 
 [tasks.check]
+description = "Check lockfile, formatting, lint, types, metadata, and workflows"
 run = [
   "uv lock --check",
   "uv run --frozen ruff format --check .",
@@ -46,6 +48,7 @@ run = [
 ]
 
 [tasks.test]
+description = "Run tests with the coverage gate"
 run = "uv run --frozen pytest -q"
 
 [tasks."check:hosts"]
@@ -57,11 +60,12 @@ description = "Audit locked Python dependencies for known vulnerabilities"
 run = "uv audit --preview-features audit-command --locked"
 
 [tasks.build]
+description = "Build distributions and smoke-test the wheel in isolation"
 run = [
   "uv build --out-dir dist --clear",
   "uv run --isolated --no-project --with dist/supagents-*.whl supagents --version",
 ]
 
 [tasks.upgrade]
-description = "Refresh dependencies; review tool pins against the workstation baseline"
+description = "Refresh locked Python dependencies within their constraints"
 run = "uv lock --upgrade"

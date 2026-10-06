@@ -12,11 +12,10 @@ htmlcov/
 # Local agent compile outputs
 .agents/
 .claude/
+.codex/
 .cursor/
 .gemini/
 .github/agents/
-.kilo/
-
-.codex/
 .grok/
+.kilo/
 .opencode/
