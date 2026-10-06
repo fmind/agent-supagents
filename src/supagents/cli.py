@@ -5,6 +5,7 @@ from typing import Annotated
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 
 from supagents import __version__, core
@@ -17,6 +18,7 @@ app = typer.Typer(
 )
 
 # Let the terminal wrap visually without inserting newlines into paths or logs.
+# Escape user-derived text (paths, keys, messages) so it is never parsed as markup.
 stdout = Console(soft_wrap=True)
 stderr = Console(stderr=True, soft_wrap=True)
 
@@ -101,7 +103,7 @@ def _load_config(config_path: Path | None) -> Config:
     try:
         return Config.load(config_path)
     except ConfigError as e:
-        stderr.print(f"[red]ERROR[/]: {e}")
+        stderr.print(f"[red]ERROR[/]: {escape(str(e))}")
         raise typer.Exit(2) from None
 
 
@@ -190,16 +192,16 @@ def build_command(
                 strict=strict,
             )
     except core.DuplicateSourceError as e:
-        stderr.print(f"[red]ERROR[/]: {e}")
+        stderr.print(f"[red]ERROR[/]: {escape(str(e))}")
         raise typer.Exit(1) from None
 
     for src in summary.sources:
         for w in src.warnings:
-            stderr.print(f"[yellow]WARN[/] {src.path}: {w}")
+            stderr.print(f"[yellow]WARN[/] {escape(f'{src.path}: {w}')}")
         for e in src.errors:
-            stderr.print(f"[red]ERROR[/] {src.path}: {e}")
+            stderr.print(f"[red]ERROR[/] {escape(f'{src.path}: {e}')}")
     for path, msg in summary.fatal_errors:
-        stderr.print(f"[red]ERROR[/] {path}: {msg}")
+        stderr.print(f"[red]ERROR[/] {escape(f'{path}: {msg}')}")
 
     verb, color = ("would write", "cyan") if no_write else ("wrote", "green")
     for plan in summary.plans:
@@ -209,9 +211,11 @@ def build_command(
                 markup=False,
             )
     for path in summary.written:
-        stdout.print(f"[{color}]{verb}[/] {path}")
+        stdout.print(f"[{color}]{verb}[/] {escape(str(path))}")
     for path in summary.orphans:
-        stdout.print(f"[yellow]obsolete[/] {path}; preview cleanup with clean --dry-run")
+        stdout.print(
+            f"[yellow]obsolete[/] {escape(str(path))}; preview cleanup with clean --dry-run"
+        )
     if summary.warning_count and check:
         stderr.print("Orphan scan skipped: resolve source warnings to determine ownership.")
     if diff and not summary.fatal_errors and not summary.error_count:
@@ -235,7 +239,7 @@ def build_command(
                 stderr.print(f"Could not preview {path}: {e}", markup=False)
     if verbose:
         for path in summary.skipped_unchanged:
-            stdout.print(f"[dim]unchanged[/] {path}")
+            stdout.print(f"[dim]unchanged[/] {escape(str(path))}")
 
     summary_verb = "would change" if no_write else "written"
     stdout.print(
@@ -297,21 +301,21 @@ def clean_command(
     try:
         orphans = core.find_orphans(scope, config, targets=targets, source_dir=source_dir)
     except (core.ParseError, core.DuplicateSourceError) as e:
-        stderr.print(f"[red]ERROR[/]: {e}")
+        stderr.print(f"[red]ERROR[/]: {escape(str(e))}")
         raise typer.Exit(2) from None
     if not orphans:
         stdout.print("[dim]Nothing to clean.[/]")
         return
     for path in orphans:
         if dry_run:
-            stdout.print(f"[cyan]would remove[/] {path}")
+            stdout.print(f"[cyan]would remove[/] {escape(str(path))}")
             continue
         try:
             path.unlink()
         except OSError as e:
-            stderr.print(f"[red]ERROR[/] {path}: {e}")
+            stderr.print(f"[red]ERROR[/] {escape(f'{path}: {e}')}")
             raise typer.Exit(2) from e
-        stdout.print(f"[red]removed[/] {path}")
+        stdout.print(f"[red]removed[/] {escape(str(path))}")
 
 
 @app.command(name="init")
@@ -345,10 +349,12 @@ def init_command(
     root = source_dir or source_root(scope)
     target_path = root / f"{stem}.md"
     if target_path.is_symlink():
-        stderr.print(f"[red]ERROR[/]: refusing to replace a symlink: {target_path}")
+        stderr.print(f"[red]ERROR[/]: refusing to replace a symlink: {escape(str(target_path))}")
         raise typer.Exit(1)
     if target_path.exists() and not force:
-        stderr.print(f"[red]ERROR[/]: {target_path} already exists. Use --force to overwrite.")
+        stderr.print(
+            f"[red]ERROR[/]: {escape(str(target_path))} already exists. Use --force to overwrite."
+        )
         raise typer.Exit(1)
     title = stem.replace("-", " ").replace("_", " ").title()
     try:
@@ -356,9 +362,9 @@ def init_command(
             target_path, _INIT_TEMPLATE.format(name=stem, title=title, targets=blocks)
         )
     except OSError as e:
-        stderr.print(f"[red]ERROR[/]: could not initialize {target_path}: {e}")
+        stderr.print(f"[red]ERROR[/]: could not initialize {escape(f'{target_path}: {e}')}")
         raise typer.Exit(2) from e
-    stdout.print(f"[green]created[/] {target_path}")
+    stdout.print(f"[green]created[/] {escape(str(target_path))}")
 
 
 @app.command(name="list")
@@ -377,7 +383,7 @@ def list_command(
     cwd = Path.cwd()
     sources, fatal_errors = core.collect_sources(scope, config, cwd, source_dir)
     for path, msg in fatal_errors:
-        stderr.print(f"[red]ERROR[/] {path}: {msg}")
+        stderr.print(f"[red]ERROR[/] {escape(f'{path}: {msg}')}")
     if fatal_errors:
         raise typer.Exit(2)
     if not sources:
@@ -386,16 +392,16 @@ def list_command(
     table = Table(show_header=True, header_style="bold")
     table.add_column("Source", style="bold")
     table.add_column("Target", style="cyan")
-    table.add_column("Output")
+    table.add_column("Output", overflow="fold")
     for src in sources:
         for plan in core.plan_source(src, config, scope, cwd, targets):
-            table.add_row(src.name, plan.target_name, str(plan.output_path))
+            table.add_row(src.name, escape(plan.target_name), escape(str(plan.output_path)))
     stdout.print(table)
     for src in sources:
         for message in src.warnings:
-            stderr.print(f"[yellow]WARN[/] {src.path}: {message}")
+            stderr.print(f"[yellow]WARN[/] {escape(f'{src.path}: {message}')}")
         for message in src.errors:
-            stderr.print(f"[red]ERROR[/] {src.path}: {message}")
+            stderr.print(f"[red]ERROR[/] {escape(f'{src.path}: {message}')}")
     if any(src.errors for src in sources):
         raise typer.Exit(1)
 

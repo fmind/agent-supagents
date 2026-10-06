@@ -158,6 +158,21 @@ def test_build_prints_source_warnings(
     assert "FOO" in (result.stderr or "")
 
 
+def test_build_prints_markup_like_text_verbatim(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # Bracketed paths and keys are user data, not Rich markup.
+    workspace = tmp_path / "[draft]"
+    (workspace / ".agents" / "supagents").mkdir(parents=True)
+    (workspace / ".agents" / "supagents" / "agent.md").write_text(
+        '---\nname: agent\n"[/BOLD]": 1\nCLAUDE: {}\n---\nbody\n', encoding="utf-8"
+    )
+    result = _run(monkeypatch, workspace, "build", "--project")
+    assert result.exit_code == 0, result.output
+    assert "'[/BOLD]'" in (result.stderr or "")
+    assert str(workspace / ".claude" / "agents" / "agent.md") in result.stdout
+
+
 def test_build_duplicate_source_exits_1(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, make_source: MakeSource
 ) -> None:
@@ -350,6 +365,19 @@ def test_list_shows_sources_and_targets(
     assert "CLAUDE" in out
     assert "GEMINI" in out
     assert "COPILOT" in out
+
+
+def test_list_folds_long_output_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    # Long paths wrap within the table instead of being truncated with an ellipsis.
+    workspace = tmp_path / ("deep" * 30)
+    (workspace / ".agents" / "supagents").mkdir(parents=True)
+    (workspace / ".agents" / "supagents" / "agent.md").write_text(
+        "---\nname: agent\nCLAUDE: {}\n---\nbody\n", encoding="utf-8"
+    )
+    result = _run(monkeypatch, workspace, "list", "--project")
+    assert result.exit_code == 0, result.output
+    assert "…" not in result.stdout
+    assert "agent.md" in result.stdout
 
 
 def test_list_empty(
