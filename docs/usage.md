@@ -51,7 +51,7 @@ targets:
     body_key: instructions
 ```
 
-Custom targets need both paths. `format` defaults to `markdown`, `filename_suffix` to `.md`, and TOML `body_key` to `developer_instructions`. Paths in `project_path` resolve from the current working directory, not the config file. Prefer relative project paths; sources and configuration are trusted local inputs, not sandboxed capabilities.
+Custom targets need both paths and a name containing a letter with an uppercase form, so their source blocks can be distinguished from shared metadata. `format` defaults to `markdown`, `filename_suffix` to `.md`, and TOML `body_key` to `developer_instructions`. Paths in `project_path` resolve from the current working directory, not the config file. Prefer relative project paths; sources and configuration are trusted local inputs, not sandboxed capabilities.
 
 ## Chezmoi integration
 
@@ -73,7 +73,7 @@ supagents build --project --strict
 supagents check --project --strict --diff
 ```
 
-`init --target` is repeatable and case-insensitive, accepts custom targets from `--config`, and rejects unknown target names. With no target filter it retains the nine bundled targets for compatibility. Scaffolds contain TODO instructions; use the [reviewer example](../examples/reviewer.md) as a practical starting point and retain the targets you need.
+`init --target` is repeatable and case-insensitive, accepts custom targets from `--config`, and rejects unknown target names. With no target filter it retains the nine bundled targets for compatibility. Names and target keys are serialized as YAML strings, including names such as `true` or `123`. Scaffolds contain TODO instructions; use the [reviewer example](../examples/reviewer.md) as a practical starting point and retain the targets you need.
 
 `build --diff` previews additions and edits as unified content diffs, without writing. `check --diff` also previews obsolete files as removals; it never removes them. `--diff` can accompany `--dry-run` or `--check`. Every command reports explicit or auto-detected scope and the source directory; previews show source → target → output mappings.
 
@@ -83,11 +83,11 @@ Orphan checks and cleanup inspect marker-bearing regular files directly in the s
 
 ## Safety and migration from 1.2
 
-Builds now validate every source, rendering, output collision, and existing-file ownership before writing. Invalid sources no longer permit partial successful writes. Each file is replaced atomically, but the entire build is not a transaction: filesystem failures can leave a partially written set, and concurrent writers are not locked. Rerun after fixing the reported error.
+Builds validate every source, rendered output's UTF-8 encoding, output collision, and existing-file ownership before writing. Invalid sources do not permit partial successful writes. Each file is replaced atomically, but the entire build is not a transaction: filesystem failures can leave a partially written set, and concurrent writers are not locked. Rerun after fixing the reported error.
 
 Only marker-bearing generated files can be replaced. An existing handwritten file or symlink causes failure even in `--check`. Move it to a deliberate backup and reconcile its content into the source before generating; no overwrite flag bypasses ownership. The generated marker is an ownership convention, not tamper protection. Parent directories may be symlinks; inspect configured paths before building.
 
-`clean` removes only marker-bearing orphan files directly in configured output directories, never handwritten files or symlinks. Missing or unreadable source directories, broken source links, invalid sources, and source warnings abort cleanup. An existing empty source directory deliberately permits orphan cleanup. It does not discover old directories after configuration changes, nested `OUTPUT` files, or custom paths outside those directories. Preview first; move obsolete files separately when migrating paths.
+`clean` removes only marker-bearing orphan files directly in configured output directories, never handwritten files, symlinks, or canonical sources, even when source and output directories overlap. Missing or unreadable source directories, broken source links, invalid sources, and source warnings abort cleanup. An existing empty source directory deliberately permits orphan cleanup. It does not discover old directories after configuration changes, nested `OUTPUT` files, or custom paths outside those directories. Preview first; move obsolete files separately when migrating paths.
 
 `init` refuses source symlinks even with `--force` and replaces regular files atomically. Invalid output paths and filesystem errors produce CLI diagnostics instead of tracebacks.
 

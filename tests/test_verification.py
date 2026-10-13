@@ -45,6 +45,55 @@ def test_init_custom_target_and_unknown_target(monkeypatch, tmp_path):
     assert not source.with_name("other.md").exists()
 
 
+@pytest.mark.parametrize("name", ["true", "123", "null", "2026-10-13"])
+def test_scalar_like_scaffold_names_round_trip(monkeypatch, tmp_path, name):
+    monkeypatch.chdir(tmp_path)
+    assert runner.invoke(app, ["init", name, "--project"]).exit_code == 0
+    result = runner.invoke(app, ["build", "--project", "--strict"])
+    assert result.exit_code == 0, result.output
+    data = tomllib.loads((tmp_path / f".codex/agents/{name}.toml").read_text())
+    assert data["name"] == name
+    result = runner.invoke(app, ["check", "--project", "--strict"])
+    assert result.exit_code == 0, result.output
+    assert "9 unchanged" in result.stdout
+
+
+@pytest.mark.parametrize("target", ["true", "my: tool"])
+def test_scaffold_quotes_custom_target_keys(monkeypatch, tmp_path, target):
+    monkeypatch.chdir(tmp_path)
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        f'targets:\n  "{target}":\n    project_path: .custom\n    global_path: ~/.custom\n'
+    )
+    flags = ["--project", "--config", str(config), "--target", target]
+    result = runner.invoke(app, ["init", "reviewer", *flags])
+    assert result.exit_code == 0, result.output
+    result = runner.invoke(app, ["build", "--strict", *flags])
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / ".custom/reviewer.md").is_file()
+    assert runner.invoke(app, ["check", "--strict", *flags]).exit_code == 0
+
+
+@pytest.mark.parametrize("command", ["check", "clean"])
+def test_overlapping_output_directory_preserves_marked_source(monkeypatch, tmp_path, command):
+    monkeypatch.chdir(tmp_path)
+    root = tmp_path / "inputs"
+    root.mkdir()
+    source = root / "reviewer.md"
+    source.write_text(
+        f"---\n{core.marker_line(Path('old.md'))}\n"
+        "name: reviewer\ndescription: Review changes\nCODEX: {}\n---\nReview.\n"
+    )
+    before = source.read_bytes()
+    config = tmp_path / "config.yaml"
+    config.write_text("targets:\n  CLAUDE:\n    project_path: inputs\n")
+    flags = ["--project", "--source-dir", str(root), "--config", str(config)]
+    assert runner.invoke(app, ["build", *flags]).exit_code == 0
+    result = runner.invoke(app, [command, *flags])
+    assert result.exit_code == 0, result.output
+    assert source.read_bytes() == before
+
+
 @pytest.mark.parametrize("command", [["check"], ["build", "--check"]])
 def test_check_reports_missing_modified_and_obsolete_without_writes(
     monkeypatch, ci_workspace, ci_outputs, command

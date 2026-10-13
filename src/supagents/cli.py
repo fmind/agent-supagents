@@ -7,6 +7,7 @@ import typer
 from rich.console import Console
 from rich.markup import escape
 from rich.table import Table
+from ruamel.yaml.comments import CommentedMap
 
 from supagents import __version__, core
 from supagents.config import Config, ConfigError, Scope, detect_scope, source_root
@@ -74,22 +75,20 @@ ForceOpt = Annotated[
 
 
 _INIT_TARGETS = {
-    "CLAUDE": "  model: inherit\n",
-    "GEMINI": '  kind: local\n  tools: ["*"]\n',
-    "AGY": "  subagent: true\n  model: inherit\n",
-    "CODEX": "",
-    "GROK": "",
-    "COPILOT": "",
-    "CURSOR": "  model: inherit\n  readonly: false\n",
-    "OPENCODE": "  mode: subagent\n",
-    "KILO": "  mode: subagent\n",
+    "CLAUDE": {"model": "inherit"},
+    "GEMINI": {"kind": "local", "tools": ["*"]},
+    "AGY": {"subagent": True, "model": "inherit"},
+    "CODEX": {},
+    "GROK": {},
+    "COPILOT": {},
+    "CURSOR": {"model": "inherit", "readonly": False},
+    "OPENCODE": {"mode": "subagent"},
+    "KILO": {"mode": "subagent"},
 }
 
 _INIT_TEMPLATE = """\
 ---
-name: {name}
-description: TODO — describe when this agent should be invoked.
-{targets}\
+{frontmatter}\
 ---
 
 # {title}
@@ -342,10 +341,12 @@ def init_command(
     targets = _resolve_targets(target, config)
     _show_scope(scope, global_ or project, source_dir)
     selected = sorted(targets) if targets is not None else list(_INIT_TARGETS)
-    blocks = "".join(
-        f"{key}:\n{_INIT_TARGETS[key]}" if _INIT_TARGETS.get(key) else f"{key}: {{}}\n"
-        for key in selected
+    frontmatter = CommentedMap(
+        name=stem,
+        description="TODO — describe when this agent should be invoked.",
     )
+    for key in selected:
+        frontmatter[key] = _INIT_TARGETS.get(key, {})
     root = source_dir or source_root(scope)
     target_path = root / f"{stem}.md"
     if target_path.is_symlink():
@@ -359,7 +360,8 @@ def init_command(
     title = stem.replace("-", " ").replace("_", " ").title()
     try:
         core.atomic_write(
-            target_path, _INIT_TEMPLATE.format(name=stem, title=title, targets=blocks)
+            target_path,
+            _INIT_TEMPLATE.format(name=stem, title=title, frontmatter=core.dump_yaml(frontmatter)),
         )
     except OSError as e:
         stderr.print(f"[red]ERROR[/]: could not initialize {escape(f'{target_path}: {e}')}")

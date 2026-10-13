@@ -291,11 +291,17 @@ def render(
         try:
             data = dict(frontmatter)
             data[target.body_key] = body.rstrip("\n") + "\n"
-            return marker_line(rel_path) + "\n" + tomli_w.dumps(data, multiline_strings=True)
+            content = marker_line(rel_path) + "\n" + tomli_w.dumps(data, multiline_strings=True)
         except (TypeError, ValueError) as e:
             raise ParseError(f"frontmatter cannot be represented as TOML: {e}") from e
-    fm_text = dump_yaml(frontmatter) if frontmatter else ""
-    return f"---\n{marker_line(rel_path)}\n{fm_text}---\n\n{body.rstrip('\n')}\n"
+    else:
+        fm_text = dump_yaml(frontmatter) if frontmatter else ""
+        content = f"---\n{marker_line(rel_path)}\n{fm_text}---\n\n{body.rstrip('\n')}\n"
+    try:
+        content.encode("utf-8")
+    except UnicodeError as e:
+        raise ParseError(f"output cannot be encoded as UTF-8: {e}") from e
+    return content
 
 
 def resolve_output_path(
@@ -349,28 +355,22 @@ def atomic_write(path: Path, content: str) -> bool:
     if not would_change(path, content):
         return False
     path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(
-        mode="w", encoding="utf-8", dir=path.parent, delete=False
-    ) as tf:
-        tmp = Path(tf.name)
-        try:
+    tmp: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=path.parent, delete=False
+        ) as tf:
+            tmp = Path(tf.name)
             tf.write(content)
-        except OSError:
-            tmp.unlink(missing_ok=True)
-            raise
-    # NamedTemporaryFile creates files at 0600; honor the user's umask instead
-    # so generated dotfiles get the conventional 0644 (or whatever umask yields).
-    umask = os.umask(0)
-    os.umask(umask)
-    try:
+        # NamedTemporaryFile creates files at 0600; honor the user's umask instead
+        # so generated dotfiles get the conventional 0644 (or whatever umask yields).
+        umask = os.umask(0)
+        os.umask(umask)
         tmp.chmod(0o666 & ~umask)
-    except OSError:
-        tmp.unlink(missing_ok=True)
-        raise
-    try:
         tmp.replace(path)
-    except OSError:
-        tmp.unlink(missing_ok=True)
+    except (OSError, UnicodeError):
+        if tmp is not None:
+            tmp.unlink(missing_ok=True)
         raise
     return True
 
@@ -575,6 +575,9 @@ def _scan_orphans(
         for src in sources
         for name, block in src.targets.items()
     }
+    # A migrated profile may retain a generated marker. Overlapping output
+    # directories must never turn a canonical source into a cleanup candidate.
+    expected.update(src.path.resolve() for src in sources)
     orphans: set[Path] = set()
     for tname, target in config.targets.items():
         if targets is not None and tname not in targets:

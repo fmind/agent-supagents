@@ -128,7 +128,9 @@ class Config(BaseModel):
     @classmethod
     def _uppercase_keys(cls, v: object) -> object:
         if isinstance(v, dict):
-            return {str(k).upper(): val for k, val in v.items()}
+            if any(not isinstance(k, str) or not k.upper().isupper() for k in v):
+                raise ValueError("target names must contain a letter with an uppercase form")
+            return {k.upper(): val for k, val in v.items()}
         return v
 
     @classmethod

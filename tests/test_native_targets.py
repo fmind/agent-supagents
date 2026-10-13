@@ -62,6 +62,29 @@ def test_invalid_codex_does_not_write_any_target(tmp_path, fields):
     assert not result.written
 
 
+def test_invalid_rendered_unicode_fails_before_any_writes(tmp_path, monkeypatch):
+    root = tmp_path / "inputs"
+    source(
+        root,
+        '---\nname: reviewer\ndescription: "\\ud800"\nCLAUDE: {}\nCODEX: {}\n---\nReview.',
+    )
+    monkeypatch.chdir(tmp_path)
+    result = CliRunner().invoke(app, ["build", "--project", "--source-dir", str(root)])
+    assert result.exit_code == 1, result.output
+    assert "UTF-8" in result.stderr
+    assert not (tmp_path / ".claude").exists()
+    assert not (tmp_path / ".codex").exists()
+
+
+def test_atomic_write_cleans_up_encoding_failure(tmp_path):
+    output = tmp_path / "reviewer.md"
+    output.write_text("Preserve this file.")
+    with pytest.raises(UnicodeEncodeError):
+        core.atomic_write(output, "\ud800")
+    assert output.read_text() == "Preserve this file."
+    assert list(tmp_path.iterdir()) == [output]
+
+
 @pytest.mark.parametrize("kind", ["handwritten", "binary", "directory", "symlink"])
 def test_existing_unowned_outputs_preserved_before_other_writes(tmp_path, kind):
     root = tmp_path / "inputs"
@@ -137,6 +160,8 @@ def test_source_dir_cli_and_config_overrides(tmp_path, monkeypatch):
         "targets:\n  CLAUDE:\n    format: xml",
         "targets:\n  CLAUDE:\n    filename_suffix: /bad",
         "targets:\n  5: {}",
+        'targets:\n  "123":\n    project_path: generated\n    global_path: ~/.custom',
+        'targets:\n  "":\n    project_path: generated\n    global_path: ~/.custom',
     ],
 )
 def test_config_rejects_invalid_shapes(tmp_path, content):

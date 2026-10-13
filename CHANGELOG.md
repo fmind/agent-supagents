@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented in this file.
 
+## [Unreleased]
+
+### 🐛 Bug Fixes
+
+- Preserve canonical sources during cleanup when source and output directories overlap.
+- Quote scaffold names and custom target keys correctly; reject target names without an uppercase form.
+- Reject unencodable output before writing and remove temporary files after encoding failures.
+- Keep compatibility probes independent of personal Supagents output configuration.
+
+### 🧹 Miscellaneous
+
+- Refresh the development toolchain, Python dependencies, and pinned GitHub Actions; qualify Python 3.15.
+
 ## [1.4.1] - 2026-10-06
 
 ### 🐛 Bug Fixes
