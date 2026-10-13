@@ -35,7 +35,9 @@ def probe() -> bool:
             example.read_text(encoding="utf-8").replace("name: reviewer\n", f"name: {name}\n"),
             encoding="utf-8",
         )
-        built = core.build("project", cwd=project, strict=True)
+        built = core.build(
+            "project", config=Config(targets=DEFAULT_TARGETS), cwd=project, strict=True
+        )
         if built.fatal_errors or built.error_count or built.warning_count:
             raise RuntimeError("synthetic compatibility source did not compile cleanly")
         # AGY 1.2.12's standalone listing observes global profiles. Compile that
