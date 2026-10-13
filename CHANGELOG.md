@@ -13,7 +13,7 @@ All notable changes to this project are documented in this file.
 
 ### 🧹 Miscellaneous
 
-- Refresh the development toolchain, Python dependencies, and pinned GitHub Actions; qualify Python 3.15.
+- Refresh the development toolchain, Python dependencies, and pinned GitHub Actions; test Python 3.15 compatibility in CI while repository tasks stay on Python 3.14.
 
 ## [1.4.1] - 2026-10-06
 

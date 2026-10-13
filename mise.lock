@@ -48,17 +48,17 @@ url = "https://github.com/evilmartians/lefthook/releases/download/v2.2.2/lefthoo
 url_api = "https://api.github.com/repos/evilmartians/lefthook/releases/assets/636518817"
 
 [[tools.python]]
-version = "3.15.0"
+version = "3.14.8"
 backend = "core:python"
-specifiers = ["3.15.0"]
+specifiers = ["3.14.8"]
 
 [tools.python."platforms.linux-x64"]
-checksum = "sha256:46edc8f6fccade47dc38001ef2d4094d9cedd21a1863d9b44b2a02c1ee76b94d"
-url = "https://github.com/astral-sh/python-build-standalone/releases/download/20261009/cpython-3.15.0+20261009-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
+checksum = "sha256:d9ec7a6935ade8b671a57ebaf111083d7314eab8dae5071d167054dadd2b97d6"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20261003/cpython-3.14.8+20261003-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
 
 [tools.python."platforms.macos-arm64"]
-checksum = "sha256:473e6213a1c55da12e60642249a6201fe9dca841b4ad8c59149798846ed87c62"
-url = "https://github.com/astral-sh/python-build-standalone/releases/download/20261009/cpython-3.15.0+20261009-aarch64-apple-darwin-install_only_stripped.tar.gz"
+checksum = "sha256:ed14e9042f36c0aa18383f5d9729bcbf17847e842666a793b5a5a5d8505c0ca1"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20261003/cpython-3.14.8+20261003-aarch64-apple-darwin-install_only_stripped.tar.gz"
 
 [[tools.uv]]
 version = "0.13.0"

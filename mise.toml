@@ -18,7 +18,7 @@ UV_PROJECT = "{{config_root}}"
 actionlint = "1.7.12"
 dprint = "0.63.0"
 lefthook = "2.2.2"
-python = "3.15.0"
+python = "3.14.8"
 uv = "0.13.0"
 zizmor = "1.30.1"
 
