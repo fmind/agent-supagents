@@ -1,0 +1,5 @@
+# Docs: https://docs.zizmor.sh/configuration/
+rules:
+  # Dependabot runs security updates only, which ignore cooldowns; version updates are off.
+  dependabot-cooldown:
+    disable: true
