@@ -122,6 +122,15 @@ def _show_scope(scope: Scope, explicit: bool, source_dir: Path | None) -> None:
     stderr.print(f"Scope: {scope} ({origin}); sources: {root}", markup=False)
 
 
+def _expand_source_dir(source_dir: Path | None) -> Path | None:
+    if source_dir is None:
+        return None
+    try:
+        return source_dir.expanduser()
+    except RuntimeError as e:
+        raise typer.BadParameter(f"source directory cannot be expanded: {e}") from e
+
+
 def _resolve_targets(target: list[str] | None, config: Config) -> set[str] | None:
     """Normalise --target values to uppercase and validate against ``config``."""
     if not target:
@@ -134,6 +143,31 @@ def _resolve_targets(target: list[str] | None, config: Config) -> set[str] | Non
             f"Known: {', '.join(sorted(config.targets))}."
         )
     return normalized
+
+
+def _prepare(
+    global_: bool,
+    project: bool,
+    target: list[str] | None,
+    config_path: Path | None,
+    source_dir: Path | None,
+) -> tuple[Config, Scope, set[str] | None, Path | None]:
+    """Resolve scope, config, target filter, and source directory and announce scope."""
+    scope = _resolve_scope(global_, project)
+    resolved_source_dir = _expand_source_dir(source_dir)
+    config = _load_config(config_path)
+    targets = _resolve_targets(target, config)
+    _show_scope(scope, global_ or project, resolved_source_dir)
+    return config, scope, targets, resolved_source_dir
+
+
+def _print_source_issues(sources: list[core.Source]) -> None:
+    """Print per-source warnings and errors to stderr verbatim."""
+    for src in sources:
+        for message in src.warnings:
+            stderr.print(f"[yellow]WARN[/] {escape(f'{src.path}: {message}')}")
+        for message in src.errors:
+            stderr.print(f"[red]ERROR[/] {escape(f'{src.path}: {message}')}")
 
 
 def _version_callback(value: bool) -> None:
@@ -173,32 +207,23 @@ def build_command(
     """Compile sources to target outputs."""
     if dry_run and check:
         raise typer.BadParameter("--dry-run and --check are mutually exclusive.")
-    config = _load_config(config_path)
-    scope = _resolve_scope(global_, project)
-    targets = _resolve_targets(target, config)
-    _show_scope(scope, global_ or project, source_dir)
+    config, scope, targets, resolved_source_dir = _prepare(
+        global_, project, target, config_path, source_dir
+    )
     no_write = dry_run or check or diff
-    try:
-        if check:
-            summary = core.check(scope, config, targets=targets, source_dir=source_dir)
-        else:
-            summary = core.build(
-                scope=scope,
-                config=config,
-                dry_run=no_write,
-                targets=targets,
-                source_dir=source_dir,
-                strict=strict,
-            )
-    except core.DuplicateSourceError as e:
-        stderr.print(f"[red]ERROR[/]: {escape(str(e))}")
-        raise typer.Exit(1) from None
+    if check:
+        summary = core.check(scope, config, targets=targets, source_dir=resolved_source_dir)
+    else:
+        summary = core.build(
+            scope=scope,
+            config=config,
+            dry_run=no_write,
+            targets=targets,
+            source_dir=resolved_source_dir,
+            strict=strict,
+        )
 
-    for src in summary.sources:
-        for w in src.warnings:
-            stderr.print(f"[yellow]WARN[/] {escape(f'{src.path}: {w}')}")
-        for e in src.errors:
-            stderr.print(f"[red]ERROR[/] {escape(f'{src.path}: {e}')}")
+    _print_source_issues(summary.sources)
     for path, msg in summary.fatal_errors:
         stderr.print(f"[red]ERROR[/] {escape(f'{path}: {msg}')}")
 
@@ -293,13 +318,12 @@ def clean_command(
     source_dir: SourceOpt = None,
 ) -> None:
     """Remove orphaned outputs (marker-bearing files no longer produced)."""
-    config = _load_config(config_path)
-    scope = _resolve_scope(global_, project)
-    targets = _resolve_targets(target, config)
-    _show_scope(scope, global_ or project, source_dir)
+    config, scope, targets, resolved_source_dir = _prepare(
+        global_, project, target, config_path, source_dir
+    )
     try:
-        orphans = core.find_orphans(scope, config, targets=targets, source_dir=source_dir)
-    except (core.ParseError, core.DuplicateSourceError) as e:
+        orphans = core.find_orphans(scope, config, targets=targets, source_dir=resolved_source_dir)
+    except core.ParseError as e:
         stderr.print(f"[red]ERROR[/]: {escape(str(e))}")
         raise typer.Exit(2) from None
     if not orphans:
@@ -336,10 +360,9 @@ def init_command(
         raise typer.BadParameter(
             f"name {name!r} must match ^[a-z0-9][a-z0-9_-]*$ (lowercase letters, digits, '-_')."
         )
-    scope = _resolve_scope(global_, project)
-    config = _load_config(config_path)
-    targets = _resolve_targets(target, config)
-    _show_scope(scope, global_ or project, source_dir)
+    _, scope, targets, resolved_source_dir = _prepare(
+        global_, project, target, config_path, source_dir
+    )
     selected = sorted(targets) if targets is not None else list(_INIT_TARGETS)
     frontmatter = CommentedMap(
         name=stem,
@@ -347,7 +370,7 @@ def init_command(
     )
     for key in selected:
         frontmatter[key] = _INIT_TARGETS.get(key, {})
-    root = source_dir or source_root(scope)
+    root = resolved_source_dir or source_root(scope)
     target_path = root / f"{stem}.md"
     if target_path.is_symlink():
         stderr.print(f"[red]ERROR[/]: refusing to replace a symlink: {escape(str(target_path))}")
@@ -378,12 +401,11 @@ def list_command(
     source_dir: SourceOpt = None,
 ) -> None:
     """List defined sources and the outputs each would produce."""
-    config = _load_config(config_path)
-    scope = _resolve_scope(global_, project)
-    targets = _resolve_targets(target, config)
-    _show_scope(scope, global_ or project, source_dir)
+    config, scope, targets, resolved_source_dir = _prepare(
+        global_, project, target, config_path, source_dir
+    )
     cwd = Path.cwd()
-    sources, fatal_errors = core.collect_sources(scope, config, cwd, source_dir)
+    sources, fatal_errors = core.collect_sources(scope, config, cwd, resolved_source_dir)
     for path, msg in fatal_errors:
         stderr.print(f"[red]ERROR[/] {escape(f'{path}: {msg}')}")
     if fatal_errors:
@@ -399,11 +421,7 @@ def list_command(
         for plan in core.plan_source(src, config, scope, cwd, targets):
             table.add_row(src.name, escape(plan.target_name), escape(str(plan.output_path)))
     stdout.print(table)
-    for src in sources:
-        for message in src.warnings:
-            stderr.print(f"[yellow]WARN[/] {escape(f'{src.path}: {message}')}")
-        for message in src.errors:
-            stderr.print(f"[red]ERROR[/] {escape(f'{src.path}: {message}')}")
+    _print_source_issues(sources)
     if any(src.errors for src in sources):
         raise typer.Exit(1)
 

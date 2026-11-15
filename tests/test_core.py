@@ -243,6 +243,25 @@ def test_has_marker_returns_false_when_frontmatter_unclosed() -> None:
     assert not core.has_marker("---\nname: x\nmodel: sonnet\n")
 
 
+def test_has_marker_crlf() -> None:
+    marker = core.marker_line(Path("x.md"))
+    md_crlf = f"---\r\n{marker}\r\nname: x\r\n---\r\n\r\nbody\r\n"
+    toml_crlf = f"{marker}\r\nname = 'x'\r\n"
+    assert core.has_marker(md_crlf)
+    assert core.has_marker(toml_crlf)
+
+
+def test_parse_yaml_directive_does_not_leak_into_render(tmp_path: Path) -> None:
+    fm = core._parse_frontmatter("%YAML 1.2\n---\nname: x\n")
+    assert fm["name"] == "x"
+    broken = _write_md(tmp_path / "broken.md", "%YAML 1.2")
+    with pytest.raises(ParseError):
+        parse_source(broken, tmp_path)
+    rendered = core.render(Path("agent.md"), _cm(name="clean"), "body")
+    assert "%YAML" not in rendered
+    assert not core.dump_yaml(_cm(name="clean")).startswith("%YAML")
+
+
 @pytest.mark.parametrize(
     ("shared", "target", "expected_keys", "expected_overrides"),
     [

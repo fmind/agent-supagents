@@ -139,18 +139,24 @@ class Config(BaseModel):
 
         Raises ``ConfigError`` if the file exists but cannot be parsed as YAML.
         """
-        if path is not None and not path.is_file():
-            raise ConfigError(f"config file does not exist: {path}")
-        path = path or user_config_path()
+        explicit = path is not None
+        try:
+            resolved = path.expanduser() if path is not None else user_config_path()
+        except RuntimeError as e:
+            raise ConfigError(f"config path cannot be expanded: {e}") from e
+        if explicit and not resolved.is_file():
+            raise ConfigError(f"config file does not exist: {resolved}")
         user: dict[str, object] = {}
-        if path.is_file():
+        if resolved.is_file():
             try:
-                loaded = YAML(typ="safe").load(path.read_text(encoding="utf-8"))
+                loaded = YAML(typ="safe").load(resolved.read_text(encoding="utf-8"))
             except (YAMLError, OSError, UnicodeError) as e:
-                raise ConfigError(f"invalid YAML in {path}: {e}") from e
+                raise ConfigError(f"invalid YAML in {resolved}: {e}") from e
             if loaded is not None and not isinstance(loaded, dict):
-                raise ConfigError(f"config must be a YAML mapping: {path}")
+                raise ConfigError(f"config must be a YAML mapping: {resolved}")
             user = loaded or {}
+        if not user:
+            return cls(targets=dict(DEFAULT_TARGETS))
 
         merged = {name: target.model_dump() for name, target in DEFAULT_TARGETS.items()}
         user_targets = user.get("targets")

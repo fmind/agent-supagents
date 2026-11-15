@@ -7,7 +7,6 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner, Result
 
-from supagents import core
 from supagents.cli import app
 from tests.conftest import MakeSource
 
@@ -173,17 +172,27 @@ def test_build_prints_markup_like_text_verbatim(
     assert str(workspace / ".claude" / "agents" / "agent.md") in result.stdout
 
 
-def test_build_duplicate_source_exits_1(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, make_source: MakeSource
+def test_cli_expands_tilde_in_config_and_source_dir(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, isolated_home: Path
 ) -> None:
-    make_source("agent.md", "---\nname: agent\nCLAUDE:\n  model: sonnet\n---\nbody\n")
+    src_dir = isolated_home / "supagents-src"
+    src_dir.mkdir()
+    (src_dir / "agent.md").write_text("---\nname: agent\nCLAUDE: {}\n---\nbody\n", encoding="utf-8")
+    cfg = isolated_home / "supagents-cfg.yaml"
+    cfg.write_text("targets:\n  claude:\n    project_path: .custom-claude\n", encoding="utf-8")
 
-    def fake_build(*args: object, **kwargs: object) -> core.BuildSummary:
-        raise core.DuplicateSourceError("simulated duplicate")
-
-    monkeypatch.setattr(core, "build", fake_build)
-    result = _run(monkeypatch, tmp_path, "build", "--project")
-    assert result.exit_code == 1
+    result = _run(
+        monkeypatch,
+        tmp_path,
+        "build",
+        "--project",
+        "--config",
+        "~/supagents-cfg.yaml",
+        "--source-dir",
+        "~/supagents-src",
+    )
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / ".custom-claude" / "agent.md").is_file()
 
 
 def test_clean_nothing_to_clean(

@@ -11,7 +11,7 @@ from supagents import core
 from supagents.config import DEFAULT_TARGETS, Config
 
 HOSTS = {
-    "AGY": ("agy", ["agents"]),
+    "AGY": ("agy", ["agent"]),
     "CLAUDE": ("claude", None),
     "CODEX": ("codex", None),
     "COPILOT": ("copilot", None),
@@ -19,7 +19,7 @@ HOSTS = {
     "GEMINI": ("gemini", None),
     "GROK": ("grok", ["inspect", "--json"]),
     "KILO": ("kilo", None),
-    "OPENCODE": ("opencode", ["debug", "agent", "supagents-compatibility-reviewer", "--pure"]),
+    "OPENCODE": ("opencode", ["debug", "agents", "--standalone"]),
 }
 
 

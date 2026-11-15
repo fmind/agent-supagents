@@ -7,7 +7,7 @@ AGY:
   excludeDefaultComponents: true
   inheritMcp: false
   commandExecutionPolicy: "off"
-  tools: [view_file, list_dir, find_by_name, grep_search]
+  tools: [view_file, grep_search]
 CLAUDE:
   tools: Read, Glob, Grep
 CODEX:
