@@ -1,4 +1,5 @@
 *.py[co]
+.cache/
 .coverage*
 .pytest_cache/
 .ruff_cache/
@@ -8,10 +9,15 @@ __pycache__/
 build/
 dist/
 htmlcov/
+site/
 
-# Local agent compile outputs
-.agents/
-.claude/
+# Local agent compile outputs and scratch prompts
+!.agents/
+.agents/*
+!.agents/skills/
+!.claude/
+.claude/*
+!.claude/skills
 .codex/
 .cursor/
 .gemini/

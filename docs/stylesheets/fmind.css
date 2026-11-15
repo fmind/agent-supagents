@@ -1,0 +1,92 @@
+/* Fmind light theme for Zensical and Material for MkDocs. */
+/* Requires primary = "custom" and accent = "custom" on the default (light) scheme:
+   https://zensical.org/docs/setup/colors/#custom-colors */
+/* Scoped to the light scheme, so an optional dark scheme keeps its stock colors. */
+[data-md-color-scheme="default"] {
+  /* Header, navigation, links and active states are dark blue, the single brand accent. */
+  --md-primary-fg-color: #174ea6;
+  --md-primary-fg-color--light: #174ea6;
+  --md-primary-fg-color--dark: #174ea6;
+  --md-primary-bg-color: #ffffff;
+  --md-primary-bg-color--light: #ffffff;
+  --md-accent-fg-color: #174ea6;
+  --md-accent-fg-color--transparent: #174ea61a;
+  --md-accent-bg-color: #ffffff;
+  --md-accent-bg-color--light: #ffffff;
+
+  /* Charcoal text on white; dark gray secondary text, gray borders, light gray fills. */
+  --md-default-fg-color: #202124;
+  --md-default-fg-color--light: #595d62;
+  --md-default-fg-color--lighter: #9aa0a6;
+  --md-default-fg-color--lightest: #f1f3f4;
+  --md-default-bg-color: #ffffff;
+  --md-typeset-color: #202124;
+  --md-typeset-a-color: #174ea6;
+
+  /* Code blocks sit on light gray; highlighted lines use light blue. */
+  --md-code-fg-color: #202124;
+  --md-code-bg-color: #f1f3f4;
+  --md-code-hl-color: #4285f4;
+  --md-code-hl-color--light: #d2e3fc;
+  --md-code-hl-keyword-color: #174ea6;
+  --md-code-hl-function-color: #174ea6;
+  --md-code-hl-special-color: #174ea6;
+  --md-code-hl-constant-color: #681da8;
+  --md-code-hl-string-color: #0d652d;
+  --md-code-hl-number-color: #934900;
+  --md-code-hl-comment-color: #595d62;
+  --md-code-hl-generic-color: #595d62;
+  --md-code-hl-name-color: #202124;
+  --md-code-hl-variable-color: #202124;
+  --md-code-hl-operator-color: #202124;
+  --md-code-hl-punctuation-color: #202124;
+
+  /* Inline marks, keys, tables and warnings. */
+  --md-typeset-mark-color: #feefc3;
+  --md-typeset-ins-color: #ceead6;
+  --md-typeset-del-color: #fad2cf;
+  --md-typeset-kbd-color: #f1f3f4;
+  --md-typeset-kbd-accent-color: #ffffff;
+  --md-typeset-kbd-border-color: #9aa0a6;
+  --md-typeset-table-color: #9aa0a6;
+  --md-typeset-table-color--light: #f1f3f4;
+  --md-warning-fg-color: #202124;
+  --md-warning-bg-color: #feefc3;
+
+  /* The classic variant and Material for MkDocs draw a dark footer. */
+  --md-footer-bg-color: #202124;
+  --md-footer-bg-color--dark: #202124;
+
+  & .md-typeset :not(pre) > code {
+    color: #174ea6;
+  }
+
+  & .md-typeset figcaption,
+  & .md-search-result__terms {
+    font-style: normal;
+  }
+
+  & .highlight :is(.k, .kd, .kn, .kp, .kr, .ow, .nt) {
+    color: #174ea6;
+    font-weight: 700;
+  }
+
+  & .highlight :is(.kc, .no) {
+    color: #934900;
+    font-weight: 700;
+  }
+
+  & .highlight :is(.kt, .nc, .nd, .na) {
+    color: #681da8;
+    font-weight: 400;
+  }
+
+  & .highlight :is(.ne, .gr, .gt, .err) {
+    color: #a50e0e;
+  }
+
+  & .highlight .linenos,
+  & .md-typeset .linenodiv pre {
+    color: #595d62;
+  }
+}

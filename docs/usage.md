@@ -103,9 +103,10 @@ Give the child the exact task, relevant files/diff, acceptance criteria, and exp
 
 ## Plugins and hooks
 
-The skill explains operation; plugin installation does not install the Python CLI. Install a matching Supagents package separately. Existing manifests remain available for their host plugin managers:
+The [/supagent skill](../skills/supagent/SKILL.md) explains operation; skill or plugin installation does not install the Python CLI. Install a matching Supagents package separately (`uv tool install supagents`). Install the standalone skill or host plugins from this repository:
 
 ```bash
+skills add fmind/agent-supagents -s supagent
 claude plugin marketplace add fmind/agent-supagents
 claude plugin install agent-supagents
 # Gemini CLI:

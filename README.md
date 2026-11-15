@@ -72,8 +72,8 @@ mise run install
 mise run all
 ```
 
-Python 3.12+ is supported; mise pins the development toolchain and uv locks dependencies. CI qualifies Linux and macOS, with an additional Python 3.12 test run. The gate audits dependencies and smoke-tests the built wheel in an isolated environment. Lefthook calls the same check and test tasks. Local checks do not establish hosted CI or live harness delegation results.
+Python 3.12+ is supported; mise pins the development toolchain and uv locks dependencies. CI qualifies Linux and macOS across Python 3.12, 3.14, 3.15, and declared minimum dependencies. The gate audits dependencies and smoke-tests the built wheel in an isolated environment. Lefthook calls the same check and test tasks. Local checks do not establish hosted CI or live harness delegation results.
 
-The repository also supplies an [Agent Skill](https://github.com/fmind/agent-supagents/blob/main/skills/use-agent-supagents/SKILL.md), Claude Code, Gemini CLI, and Copilot plugin manifests, and a downstream pre-commit hook. See [plugin installation](https://github.com/fmind/agent-supagents/blob/main/docs/usage.md#plugins-and-hooks).
+The repository also supplies a [/supagent skill](https://github.com/fmind/agent-supagents/blob/main/skills/supagent/SKILL.md), Claude Code, Gemini CLI, and Copilot plugin manifests, and a downstream pre-commit hook. See [plugin installation](https://github.com/fmind/agent-supagents/blob/main/docs/usage.md#plugins-and-hooks).
 
 [MIT license](https://github.com/fmind/agent-supagents/blob/main/LICENSE).
