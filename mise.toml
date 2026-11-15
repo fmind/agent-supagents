@@ -1,8 +1,10 @@
 # :schema https://mise.jdx.dev/schema/mise.json
 # https://mise.jdx.dev/configuration.html
+min_version = "2026.11.8"
+
 [settings]
 lockfile = true
-lockfile_platforms = ["linux-x64", "macos-arm64"]
+lockfile_platforms = ["linux-arm64", "linux-x64", "macos-arm64"]
 
 [settings.task]
 run_auto_install = false
@@ -15,12 +17,13 @@ dir = "{{config_root}}"
 UV_PROJECT = "{{config_root}}"
 
 [tools]
-actionlint = "1.7.12"
-dprint = "0.63.0"
+betterleaks = "1.10.1"
+dprint = "0.64.3"
+jactionlint = "2.6.0"
 lefthook = "2.2.2"
-python = "3.14.8"
-uv = "0.13.0"
-zizmor = "1.30.1"
+# Match the workstation Python 3.14 minor; CI also tests Python 3.12 and 3.15.
+python = "3.14.10"
+uv = "0.13.8"
 
 [tasks.all]
 description = "Format, check, audit, test, and build"
@@ -28,44 +31,67 @@ run = ["mise run format", "mise run check", "mise run audit", "mise run test", "
 
 [tasks.install]
 description = "Install the locked tools, dependencies, and local hooks"
-run = ["mise install --locked", "uv sync --frozen", "lefthook install"]
+run = [
+  "mise install --locked",
+  "UV_MALWARE_CHECK=1 uv sync --locked --preview-features malware-check",
+  "lefthook install",
+]
 
 [tasks.format]
 description = "Fix lint and format Python, Markdown, JSON, TOML, and YAML"
-run = ["uv run --frozen ruff check --fix .", "uv run --frozen ruff format .", "dprint fmt"]
+run = ["uv run --locked ruff check --fix .", "uv run --locked ruff format .", "dprint fmt"]
 
 [tasks.check]
 description = "Check lockfile, formatting, lint, types, metadata, and workflows"
 run = [
   "uv lock --check",
-  "uv run --frozen ruff format --check .",
-  "uv run --frozen ruff check .",
-  "uv run --frozen ty check",
-  "uv run --frozen validate-pyproject pyproject.toml",
+  "uv run --locked ruff format --check .",
+  "uv run --locked ruff check .",
+  "uv run --locked ty check",
+  "uv run --locked validate-pyproject pyproject.toml",
   "dprint check",
-  "actionlint",
-  "zizmor --offline .github/",
+  "betterleaks dir . --unsafe-auto-load-config --redact=100 --verbose --no-banner",
 ]
+
+[tasks."check:leaks:full"]
+description = "Scan the complete Git history for leaked secrets"
+run = "betterleaks git --unsafe-auto-load-config --redact=100 --verbose --no-banner"
 
 [tasks.test]
 description = "Run tests with the coverage gate"
-run = "uv run --frozen pytest -q"
+run = "uv run --locked pytest -q"
 
 [tasks."check:hosts"]
 description = "Report installed host versions and synthetic agent discovery (no model calls)"
-run = "uv run --frozen python scripts/check_hosts.py"
+run = "uv run --locked python scripts/check_hosts.py"
 
 [tasks.audit]
 description = "Audit locked Python dependencies for known vulnerabilities"
 run = "uv audit --preview-features audit-command --locked"
 
 [tasks.build]
+description = "Build the documentation site and Python distributions"
+depends = ["build:docs", "build:package"]
+
+[tasks."build:docs"]
+description = "Build the single-page README documentation site (Zensical)"
+run = "uv run --locked zensical build --clean --strict"
+
+[tasks."serve:docs"]
+description = "Preview the documentation site (override port via PORT=8001)"
+run = "uv run --locked zensical serve -a 127.0.0.1:${PORT:-8000}"
+
+[tasks."build:package"]
 description = "Build distributions and smoke-test the wheel in isolation"
 run = [
-  "uv build --out-dir dist --clear",
+  "uv build --out-dir dist --clear --no-sources",
   "uv run --isolated --no-project --with dist/supagents-*.whl supagents --version",
 ]
 
+[tasks.clean]
+description = "Remove build artifacts and coverage files"
+run = "rm -rf .cache .coverage .coverage.* .pytest_cache .ruff_cache .ty_cache build dist htmlcov site"
+
 [tasks.upgrade]
 description = "Refresh locked Python dependencies within their constraints"
-run = "uv lock --upgrade"
+run = "UV_MALWARE_CHECK=1 uv lock --upgrade --preview-features malware-check"
