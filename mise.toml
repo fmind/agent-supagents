@@ -49,7 +49,9 @@ run = [
   "uv run --locked ruff check .",
   "uv run --locked ty check",
   "uv run --locked validate-pyproject pyproject.toml",
+  "uv run --locked python scripts/verify_release.py",
   "dprint check",
+  "jactionlint --profile pedantic",
   "betterleaks dir . --unsafe-auto-load-config --redact=100 --verbose --no-banner",
 ]
 

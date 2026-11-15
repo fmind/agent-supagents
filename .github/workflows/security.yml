@@ -1,0 +1,35 @@
+# https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax
+name: Security
+on:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+concurrency:
+  group: security
+  cancel-in-progress: true
+jobs:
+  scan:
+    name: Full-history and vulnerability scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout complete history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up mise tools
+        uses: jdx/mise-action@d5574b52816a478f9d4e6529a3f6ff17a8a36785 # v5.2.8
+        with:
+          version: 2026.11.8
+          cache: true
+      - name: Scan complete Git history
+        run: mise run check:leaks:full
+      - name: Audit locked dependencies
+        if: ${{ !cancelled() }}
+        run: mise run audit

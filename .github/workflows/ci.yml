@@ -4,13 +4,20 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_call: # CD runs these jobs on the tagged commit before publishing.
+  workflow_dispatch:
 permissions:
   contents: read
+defaults:
+  run:
+    shell: bash
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Keep a literal prefix so workflow_call from CD does not share or cancel CD's group.
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 jobs:
   qualify:
+    name: Qualify (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     strategy:
@@ -18,16 +25,25 @@ jobs:
       matrix:
         os: [ubuntu-24.04, macos-15]
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
-      - run: mise run all
+      - name: Set up mise tools
+        uses: jdx/mise-action@d5574b52816a478f9d4e6529a3f6ff17a8a36785 # v5.2.8
+        with:
+          version: 2026.11.8
+          cache: true
+      - name: Run canonical gate
+        run: mise run all
       - name: Reject generated drift
-        run: |
-          status="$(git status --porcelain)"
-          printf '%s\n' "$status"
-          test -z "$status"
-      - name: Check minimum Python
-        if: runner.os == 'Linux'
-        run: uv run --frozen --isolated --python 3.12 pytest -q
+        run: git status --short && [ -z "$(git status --porcelain)" ]
+      - name: Check minimum Python (3.12)
+        if: ${{ runner.os == 'Linux' }}
+        run: uv run --locked --isolated --python 3.12 pytest -q
+      - name: Check latest Python (3.15)
+        if: ${{ runner.os == 'Linux' }}
+        run: uv run --locked --isolated --python 3.15 pytest -q
+      - name: Check lowest direct dependencies
+        if: ${{ runner.os == 'Linux' }}
+        run: uv run --isolated --resolution lowest-direct --all-groups --python 3.12 pytest -q

@@ -1,56 +1,121 @@
 # https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax
 name: CD
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - "v*"
 permissions:
   contents: read
+defaults:
+  run:
+    shell: bash
 concurrency:
   group: cd-${{ github.ref }}
   cancel-in-progress: false
 jobs:
+  ci:
+    name: Qualify tagged revision
+    # A tag-triggered workflow already pins the caller's exact tag commit.
+    # jactionlint ignore=self-repository
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
   build:
+    name: Build distributions
+    needs: ci
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
+      - name: Set up mise tools
+        uses: jdx/mise-action@d5574b52816a478f9d4e6529a3f6ff17a8a36785 # v5.2.8
         with:
+          version: 2026.11.8
           cache: false
-      - name: Verify release version
-        run: |
-          python - <<'PYTHON'
-          import os, tomllib
-          from pathlib import Path
-          version = tomllib.loads(Path("pyproject.toml").read_text())["project"]["version"]
-          assert os.environ["GITHUB_REF_NAME"] == f"v{version}", "tag/version mismatch"
-          PYTHON
-      - run: mise run all
-      - name: Check minimum Python
-        run: uv run --frozen --isolated --python 3.12 pytest -q
-      - name: Reject generated drift
-        run: |
-          status="$(git status --porcelain)"
-          printf '%s\n' "$status"
-          test -z "$status"
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - name: Verify release manifests and changelog
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: uv run --locked python scripts/verify_release.py "$RELEASE_TAG"
+      - name: Build and smoke-test package
+        run: mise run build:package
+      - name: Record distribution hashes
+        run: sha256sum dist/*.whl dist/*.tar.gz > python-package.sha256
+      - name: Upload distributions
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: distributions
-          path: dist/
+          name: python-package-distributions
+          path: |
+            dist/*.whl
+            dist/*.tar.gz
+            python-package.sha256
           if-no-files-found: error
           retention-days: 1
   publish:
+    name: Publish to PyPI
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    environment: pypi
+    environment:
+      name: pypi
+      url: https://pypi.org/p/supagents
     permissions:
-      id-token: write # Authenticate PyPI Trusted Publishing without a stored API token.
+      contents: read
+      id-token: write # Authenticate provenance attestation and PyPI Trusted Publishing.
+      attestations: write # Publish build provenance attestations on GitHub.
+      artifact-metadata: write # Associate provenance with repository artifacts.
     steps:
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      - name: Download distributions
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: distributions
-          path: dist/
-      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+          name: python-package-distributions
+      - name: Verify distribution hashes
+        run: sha256sum --check --strict python-package.sha256
+      - name: Verify distribution count
+        run: test "$(find dist -maxdepth 1 -type f | wc -l)" -eq 2
+      - name: Attest distribution provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: |
+            dist/*.whl
+            dist/*.tar.gz
+      - name: Publish distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
+        with:
+          packages-dir: dist/
+          skip-existing: true
+  release:
+    name: Publish GitHub release
+    needs: publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write # Publish the GitHub release after PyPI succeeds.
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Download distributions
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: python-package-distributions
+      - name: Verify distribution hashes
+        run: sha256sum --check --strict python-package.sha256
+      - name: Extract release notes
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python3 scripts/verify_release.py "$RELEASE_TAG" --notes > "$RUNNER_TEMP/release-notes.md"
+      - name: Publish verified GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$RELEASE_TAG" dist/*.whl dist/*.tar.gz --draft --verify-tag --title "$RELEASE_TAG" --notes-file "$RUNNER_TEMP/release-notes.md"
+          gh release download "$RELEASE_TAG" --dir "$RUNNER_TEMP/release-assets"
+          diff --recursive dist "$RUNNER_TEMP/release-assets"
+          gh release edit "$RELEASE_TAG" --draft=false --verify-tag

@@ -1,0 +1,4 @@
+# Docs: https://jactionlint.jdx.dev/config
+rules:
+  # Dependabot runs security updates only; upgrade-tools owns routine version updates.
+  dependabot-missing-actions-update: off
