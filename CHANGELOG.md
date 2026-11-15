@@ -2,7 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
-## [Unreleased]
+## [1.5.0] - 2026-11-15
+
+### 🚀 Features
+
+- Replace `/use-agent-supagents` with standalone `/supagent` skill and add repository maintenance skills (`harnesses`, `release`).
+- Publish a single-page README documentation site via Zensical on GitHub Pages (`https://fmind.github.io/agent-supagents/`).
 
 ### 🐛 Bug Fixes
 
@@ -10,10 +15,13 @@ All notable changes to this project are documented in this file.
 - Quote scaffold names and custom target keys correctly; reject target names without an uppercase form.
 - Reject unencodable output before writing and remove temporary files after encoding failures.
 - Keep compatibility probes independent of personal Supagents output configuration.
+- Isolate `ruamel.yaml` round-trip parser/dumper state per call so YAML directives cannot leak across rendered outputs.
+- Detect generated ownership markers across CRLF line endings and expand `~` on `--config` and `--source-dir`.
+- Align Antigravity reviewer example tools with current `agy` registry names and update the OpenCode 2.x discovery probe (`opencode debug agents --standalone`).
 
 ### 🧹 Miscellaneous
 
-- Refresh the development toolchain, Python dependencies, and pinned GitHub Actions; test Python 3.15 compatibility in CI while repository tasks stay on Python 3.14.
+- Refresh the development toolchain (`uv_build`, `jactionlint`, `betterleaks`, `dprint`, `uv`), Python dependencies (including `typer` 0.29), `linux-arm64` lockfile support, and pinned GitHub Actions; automate tag-driven PyPI/GitHub releases, Docs deployment, and weekly security scans across Python 3.12, 3.14, and 3.15.
 
 ## [1.4.1] - 2026-10-06
 
