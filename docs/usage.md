@@ -2,14 +2,18 @@
 
 ## Source contract
 
-Sources are UTF-8 Markdown files with YAML frontmatter and a nonempty body. Filenames match `[a-z0-9][a-z0-9_-]*.md`; discovery reads the selected directory without recursion. A BOM and CRLF line endings are accepted.
+Sources are UTF-8 Markdown files with YAML frontmatter and a body (empty child bodies are allowed when inheriting a non-empty preamble partial without `{{BODY}}`). Filenames match `[a-z0-9][a-z0-9_-]*.md`; discovery reads the selected directory without recursion. Files starting with `_` (`_[a-z0-9][a-z0-9_-]*.md`) are partials rather than standalone sources. A BOM and CRLF line endings are accepted.
 
-Lowercase and camelCase frontmatter fields are shared. Uppercase keys select targets; an empty block (`CODEX: {}`) enables a target. Target metadata overrides shared fields without a deep merge. Keep host-specific settings inside their target blocks. Unknown targets and directives produce warnings; malformed `OUTPUT` values are errors.
+Lowercase and camelCase frontmatter fields are shared (`extends` is reserved for partial inheritance and omitted from outputs). Uppercase keys select targets; an empty block (`CODEX: {}`) enables a target, and `CODEX: false` omits a target (either standalone or suppressing an inherited target). Target metadata overrides shared fields without a deep merge. Keep host-specific settings inside their target blocks. Unknown targets and directives produce warnings on concrete sources; on `_*.md` partials, any target warning or error fails the partial itself before inheritance. Malformed `OUTPUT` values are errors.
 
 Two uppercase directives are supported inside a target:
 
-- `APPEND_BODY`: append host-specific instructions after the shared body.
+- `APPEND_BODY`: append host-specific instructions after the shared body (chained base-then-child when inheriting).
 - `OUTPUT`: override the output file. Relative paths resolve beside the source; `~` expands to the current home. Paths outside the selected scope produce a warning; use only trusted sources and configuration.
+
+### Partial inheritance
+
+Put shared target permissions, metadata, and output contracts inside a `_*.md` partial in the same source directory, then inherit from concrete sources with `extends: _partial` or a left-to-right list `extends: [_a, _b]`. Ancestors are linearized in deduplicated post-order (left-to-right, diamond/duplicate references applied once) so shared bases do not clobber earlier sibling overrides or duplicate inherited text. Partials may leave their body empty (frontmatter-only), insert `{{BODY}}` once as a placement slot for the child body (non-slot sibling partials insert above `{{BODY}}` without consuming the slot), or supply a preamble prepended before the child body. Re-enabling a `TARGET: false` target later in a child starts from a fresh target block. Supagents rejects symlinked partials, path traversal, and inheritance cycles.
 
 Codex output requires nonempty `name` and `description` strings and reserves `developer_instructions` for the body. TOML serialization preserves nested tables and multiline instructions; YAML values that TOML cannot represent, such as null, fail before any writes. Other metadata passes through unchanged: Supagents does not claim complete validation against each harness's evolving schema.
 

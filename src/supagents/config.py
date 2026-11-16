@@ -150,7 +150,7 @@ class Config(BaseModel):
         if resolved.is_file():
             try:
                 loaded = YAML(typ="safe").load(resolved.read_text(encoding="utf-8"))
-            except (YAMLError, OSError, UnicodeError) as e:
+            except (YAMLError, OSError, UnicodeError, RecursionError) as e:
                 raise ConfigError(f"invalid YAML in {resolved}: {e}") from e
             if loaded is not None and not isinstance(loaded, dict):
                 raise ConfigError(f"config must be a YAML mapping: {resolved}")

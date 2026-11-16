@@ -232,3 +232,52 @@ def test_documented_reviewer_compiles_for_every_bundled_target(tmp_path):
     checked = core.check("project", cwd=tmp_path, source_dir=source.parent)
     assert not checked.written
     assert not checked.orphans
+
+
+def test_partial_cli_list_build_check_clean_journey(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    root = tmp_path / ".agents/supagents"
+    root.mkdir(parents=True)
+    partial = root / "_reviewer.md"
+    partial.write_text(
+        "---\n"
+        "CLAUDE:\n"
+        "  model: inherit\n"
+        "  tools: [Read, Glob, Grep]\n"
+        "OPENCODE:\n"
+        "  mode: subagent\n"
+        "---\n"
+        "{{BODY}}\n\n"
+        "## Output Contract\n"
+        "Report VERDICT.\n",
+        encoding="utf-8",
+    )
+    child = root / "security.md"
+    child.write_text(
+        "---\n"
+        "extends: _reviewer\n"
+        "name: security\n"
+        "description: Audit security boundaries\n"
+        "---\n"
+        "Inspect threat paths.\n",
+        encoding="utf-8",
+    )
+
+    listed = runner.invoke(app, ["list", "--project"])
+    assert listed.exit_code == 0, listed.output
+    assert "security" in listed.stdout
+    assert "_reviewer" not in listed.stdout
+
+    assert runner.invoke(app, ["build", "--project", "--strict"]).exit_code == 0
+    checked = runner.invoke(app, ["check", "--project", "--strict"])
+    assert checked.exit_code == 0, checked.output
+    assert "2 unchanged, 0 obsolete" in checked.stdout
+
+    child.unlink()
+    dry_clean = runner.invoke(app, ["clean", "--project", "--dry-run"])
+    assert dry_clean.exit_code == 0, dry_clean.output
+    assert "would remove" in dry_clean.stdout
+    assert runner.invoke(app, ["clean", "--project"]).exit_code == 0
+    assert partial.exists()
+    assert not (tmp_path / ".claude/agents/security.md").exists()
+    assert not (tmp_path / ".opencode/agents/security.md").exists()

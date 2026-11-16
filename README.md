@@ -41,7 +41,7 @@ CODEX:
 Read the assigned files and requirements. Return findings with file and line references, evidence, and unresolved gaps. Do not implement fixes or delegate further work.
 ```
 
-Save this source as `.agents/supagents/reviewer.md`. The [complete reviewer example](https://github.com/fmind/agent-supagents/blob/main/examples/reviewer.md) includes all nine targets; retain only those you use.
+Save this source as `.agents/supagents/reviewer.md`. The [complete reviewer example](https://github.com/fmind/agent-supagents/blob/main/examples/reviewer.md) includes all nine targets; retain only those you use. Shared `_*.md` partials reduce duplication across multiple roles via `extends` and `{{BODY}}` (see [partial inheritance](https://github.com/fmind/agent-supagents/blob/main/docs/usage.md#partial-inheritance)).
 
 Only declared target blocks produce outputs. Supagents preserves the Markdown body and merges shared metadata with each target's overrides; Codex receives the body as TOML `developer_instructions`. It does not translate tool names, permissions, or model IDs. Native settings and parent-session policies determine runtime behavior.
 

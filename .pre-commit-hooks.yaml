@@ -5,4 +5,4 @@
   entry: supagents build
   language: python
   pass_filenames: false
-  files: ^\.agents/supagents/[a-z0-9][a-z0-9_-]*\.md$
+  files: ^\.agents/supagents/_?[a-z0-9][a-z0-9_-]*\.md$

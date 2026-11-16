@@ -109,6 +109,16 @@ def test_load_raises_config_error_on_malformed_yaml(tmp_path: Path) -> None:
         Config.load(cfg_file)
 
 
+def test_load_rejects_deeply_nested_yaml(tmp_path: Path) -> None:
+    cfg_file = tmp_path / "config.yaml"
+    cfg_file.write_text(
+        "targets: " + ("[" * 600) + "1" + ("]" * 600) + "\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match="invalid YAML"):
+        Config.load(cfg_file)
+
+
 def test_target_config_preserves_tilde_for_lazy_expansion() -> None:
     # Paths are stored as-written; expansion happens at use time so test fixtures
     # can monkeypatch $HOME and have it take effect for global-scope writes.

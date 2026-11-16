@@ -7,7 +7,7 @@ metadata:
   author: Médéric HURIER (Fmind)
   source: github.com/fmind/agent-supagents/tree/main/skills/supagent
   created: "2026-05-07"
-  updated: "2026-11-15"
+  updated: "2026-11-16"
 ---
 
 # Supagent
@@ -39,6 +39,7 @@ Compile one Markdown role file with shared instructions and explicit native targ
 - `AGY`, `CLAUDE`, `COPILOT`, `CURSOR`, `GEMINI`, `GROK`, `KILO`, and `OPENCODE` emit Markdown with merged YAML frontmatter.
 - `CODEX` emits TOML (`name` and `description` required) and stores the body plus `APPEND_BODY` in `developer_instructions`.
 - `OUTPUT` overrides an output path (relative paths resolve beside the source); custom targets in config can set `format: toml` and `body_key`.
+- Shared `_*.md` partials in the source directory factor repeated target settings and body slots (`{{BODY}}`) via `extends: _name` or `extends: [_a, _b]`; `TARGET: false` disables an inherited target.
 
 ## Gotchas
 
