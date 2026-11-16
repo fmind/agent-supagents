@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented in this file.
 
+## [1.6.0] - 2026-11-16
+
+### 🚀 Features
+
+- Add `_*.md` partial inheritance via `extends` (single partial or left-to-right list, deduplicated post-order DAG linearization), `{{BODY}}` slot placement (preserving open slots across non-slot sibling partials), chained target `APPEND_BODY`, and `TARGET: false` opt-outs.
+
+### ⚠️ Breaking Changes
+
+- Reserve lowercase top-level `extends` for partial inheritance (omitted from emitted Markdown/TOML outputs; non-`_*` values now fail with `ParseError`).
+- Exclude `_*.md` partial files from `supagents.core.list_sources` (add `iter_markdown_files(root, partial=...)` for callers needing both concrete sources and partials) and fail closed on warnings/errors inside `_*.md` partials.
+
+### 🐛 Bug Fixes
+
+- Match `_*.md` partial files in `.pre-commit-hooks.yaml` (`supagents-build`).
+- Catch `RecursionError` cleanly as `ParseError` / `ConfigError` on deeply nested YAML frontmatter/configs and cyclic `CommentedMap` TOML/YAML renders.
+
 ## [1.5.0] - 2026-11-15
 
 ### 🚀 Features

@@ -81,8 +81,10 @@ def _copy_release_fixture(
         "plugin.json",
     ):
         text = (REPO_ROOT / rel).read_text(encoding="utf-8")
-        if version != "1.4.1":
-            text = text.replace('"1.4.1"', f'"{version}"')
+        if rel == "pyproject.toml":
+            text = re.sub(r'(?m)^version = "[^"]+"', f'version = "{version}"', text, count=1)
+        else:
+            text = re.sub(r'"version": "[^"]+"', f'"version": "{version}"', text)
         (tmp_path / rel).write_text(text, encoding="utf-8")
     shutil.copy2(REPO_ROOT / "CHANGELOG.md", tmp_path / "CHANGELOG.md")
     if changelog is not None:
