@@ -4,14 +4,13 @@ import tomllib
 from pathlib import Path
 
 import pytest
-from typer.testing import CliRunner
 
 from supagents import core
-from supagents.cli import app
 from supagents.config import Config, ConfigError
+from tests.conftest import RunCLI
 
 
-def source(root, text, name="reviewer.md"):
+def source(root: Path, text: str, name: str = "reviewer.md") -> Path:
     root.mkdir(parents=True, exist_ok=True)
     path = root / name
     path.write_text(text, encoding="utf-8")
@@ -31,7 +30,7 @@ def test_native_formats_preserve_body_and_nested_config(tmp_path):
     result = core.build("project", cwd=tmp_path, source_dir=root)
     assert not result.fatal_errors
     assert len(result.written) == 3
-    data = tomllib.loads((tmp_path / ".codex/agents/reviewer.toml").read_text())
+    data = tomllib.loads((tmp_path / ".codex/agents/reviewer.toml").read_text(encoding="utf-8"))
     assert data["developer_instructions"] == body + "\n\nReport evidence.\n"
     assert data["mcp_servers"]["example"]["enabled"] is False
     assert data["sandbox_mode"] == "read-only"
@@ -62,14 +61,13 @@ def test_invalid_codex_does_not_write_any_target(tmp_path, fields):
     assert not result.written
 
 
-def test_invalid_rendered_unicode_fails_before_any_writes(tmp_path, monkeypatch):
+def test_invalid_rendered_unicode_fails_before_any_writes(tmp_path, run_cli: RunCLI):
     root = tmp_path / "inputs"
     source(
         root,
         '---\nname: reviewer\ndescription: "\\ud800"\nCLAUDE: {}\nCODEX: {}\n---\nReview.',
     )
-    monkeypatch.chdir(tmp_path)
-    result = CliRunner().invoke(app, ["build", "--project", "--source-dir", str(root)])
+    result = run_cli("build", "--project", "--source-dir", str(root), cwd=tmp_path)
     assert result.exit_code == 1, result.output
     assert "UTF-8" in result.stderr
     assert not (tmp_path / ".claude").exists()
@@ -78,10 +76,10 @@ def test_invalid_rendered_unicode_fails_before_any_writes(tmp_path, monkeypatch)
 
 def test_atomic_write_cleans_up_encoding_failure(tmp_path):
     output = tmp_path / "reviewer.md"
-    output.write_text("Preserve this file.")
+    output.write_text("Preserve this file.", encoding="utf-8")
     with pytest.raises(UnicodeEncodeError):
         core.atomic_write(output, "\ud800")
-    assert output.read_text() == "Preserve this file."
+    assert output.read_text(encoding="utf-8") == "Preserve this file."
     assert list(tmp_path.iterdir()) == [output]
 
 
@@ -107,12 +105,11 @@ def test_existing_unowned_outputs_preserved_before_other_writes(tmp_path, kind):
 @pytest.mark.parametrize("output", ["reviewer.md", "../../shared.md"])
 def test_source_overwrite_and_output_collision_rejected(tmp_path, output):
     root = tmp_path / "inputs"
-    # Two different targets resolve to one file, or directly to the input.
     source(root, f"---\nCLAUDE:\n  OUTPUT: {output}\nGROK:\n  OUTPUT: {output}\n---\nReview.")
     result = core.build("project", cwd=tmp_path, source_dir=root)
     assert result.fatal_errors
     assert not result.written
-    assert (root / "reviewer.md").read_text().startswith("---")
+    assert (root / "reviewer.md").read_text(encoding="utf-8").startswith("---")
 
 
 @pytest.mark.parametrize(
@@ -128,29 +125,27 @@ def test_cleanup_refuses_invalid_or_ambiguous_sources(tmp_path, broken):
     root = tmp_path / "inputs"
     path = source(root, "---\nCLAUDE: {}\n---\nReview.")
     core.build("project", cwd=tmp_path, source_dir=root)
-    path.write_text(broken)
+    path.write_text(broken, encoding="utf-8")
     with pytest.raises(core.ParseError, match="cannot clean"):
         core.find_orphans("project", cwd=tmp_path, source_dir=root)
     assert (tmp_path / ".claude/agents/reviewer.md").is_file()
 
 
-def test_source_dir_cli_and_config_overrides(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
+def test_source_dir_cli_and_config_overrides(tmp_path, run_cli: RunCLI):
     cfg = tmp_path / "supagents.yaml"
-    cfg.write_text("targets:\n  CODEX:\n    project_path: dot_codex/agents\n")
-    runner = CliRunner()
+    cfg.write_text("targets:\n  CODEX:\n    project_path: dot_codex/agents\n", encoding="utf-8")
     assert (
-        runner.invoke(app, ["init", "reviewer", "--project", "--source-dir", "inputs"]).exit_code
+        run_cli("init", "reviewer", "--project", "--source-dir", "inputs", cwd=tmp_path).exit_code
         == 0
     )
     flags = ["--project", "--source-dir", "inputs", "--config", str(cfg), "--target", "codex"]
-    assert runner.invoke(app, ["build", *flags, "--check"]).exit_code == 1
-    assert runner.invoke(app, ["build", *flags]).exit_code == 0
+    assert run_cli("build", *flags, "--check", cwd=tmp_path).exit_code == 1
+    assert run_cli("build", *flags, cwd=tmp_path).exit_code == 0
     assert (tmp_path / "dot_codex/agents/reviewer.toml").is_file()
-    assert runner.invoke(app, ["build", *flags, "--check"]).exit_code == 0
-    assert runner.invoke(app, ["list", *flags]).exit_code == 0
-    (tmp_path / "inputs/reviewer.md").write_text("broken")
-    assert runner.invoke(app, ["clean", *flags]).exit_code == 2
+    assert run_cli("build", *flags, "--check", cwd=tmp_path).exit_code == 0
+    assert run_cli("list", *flags, cwd=tmp_path).exit_code == 0
+    (tmp_path / "inputs/reviewer.md").write_text("broken", encoding="utf-8")
+    assert run_cli("clean", *flags, cwd=tmp_path).exit_code == 1
 
 
 @pytest.mark.parametrize(
@@ -166,7 +161,7 @@ def test_source_dir_cli_and_config_overrides(tmp_path, monkeypatch):
 )
 def test_config_rejects_invalid_shapes(tmp_path, content):
     path = tmp_path / "config.yaml"
-    path.write_text(content)
+    path.write_text(content, encoding="utf-8")
     with pytest.raises(ConfigError):
         Config.load(path)
 
@@ -181,7 +176,7 @@ def test_missing_explicit_inputs_fail(tmp_path):
 
 @pytest.mark.parametrize("failure", ["missing", "unreadable", "broken-source-link"])
 def test_cleanup_preserves_outputs_when_sources_cannot_be_enumerated(
-    tmp_path, monkeypatch, failure
+    tmp_path, monkeypatch, failure, run_cli: RunCLI
 ):
     root = tmp_path / ".agents/supagents"
     path = source(root, "---\nCLAUDE: {}\n---\nReview.")
@@ -203,12 +198,11 @@ def test_cleanup_preserves_outputs_when_sources_cannot_be_enumerated(
             return original(directory)
 
         monkeypatch.setattr(Path, "iterdir", inaccessible)
-    monkeypatch.chdir(tmp_path)
 
-    result = CliRunner().invoke(app, ["clean", "--project"])
+    cli_res = run_cli("clean", "--project", cwd=tmp_path)
 
-    assert result.exit_code == 2
-    assert "cannot clean" in result.output
+    assert cli_res.exit_code == 1
+    assert "cannot clean" in cli_res.stderr
     assert output.read_bytes() == before
 
 
@@ -227,53 +221,50 @@ def test_build_reports_source_enumeration_errors_before_writing(tmp_path, monkey
 
 @pytest.mark.parametrize("force", [False, True])
 @pytest.mark.parametrize("existing", [False, True])
-def test_init_never_follows_source_symlinks(tmp_path, monkeypatch, force, existing):
+def test_init_never_follows_source_symlinks(tmp_path, force, existing, run_cli: RunCLI):
     root = tmp_path / "inputs"
     root.mkdir()
     outside = tmp_path / "outside.md"
     if existing:
-        outside.write_text("Preserve this file.")
+        outside.write_text("Preserve this file.", encoding="utf-8")
     path = root / "reviewer.md"
     path.symlink_to(outside)
-    monkeypatch.chdir(tmp_path)
     args = ["init", "reviewer", "--project", "--source-dir", str(root)]
     if force:
         args.append("--force")
 
-    result = CliRunner().invoke(app, args)
+    result = run_cli(*args, cwd=tmp_path)
 
     assert result.exit_code == 1
-    assert "symlink" in result.output
+    assert "symlink" in result.stderr
     assert path.is_symlink()
     assert outside.exists() is existing
     if existing:
-        assert outside.read_text() == "Preserve this file."
+        assert outside.read_text(encoding="utf-8") == "Preserve this file."
 
 
 @pytest.mark.parametrize("command", ["build", "list", "clean"])
 @pytest.mark.parametrize("path", ['"bad\\0.md"', "~supagents-user-that-does-not-exist/agent.md"])
-def test_invalid_output_paths_report_controlled_errors(tmp_path, monkeypatch, command, path):
+def test_invalid_output_paths_report_controlled_errors(tmp_path, command, path, run_cli: RunCLI):
     source(tmp_path / ".agents/supagents", f"---\nCLAUDE:\n  OUTPUT: {path}\n---\nReview.")
-    monkeypatch.chdir(tmp_path)
-    result = CliRunner().invoke(app, [command, "--project"])
-    assert result.exit_code in {1, 2}
-    assert "ERROR" in result.output
+    result = run_cli(command, "--project", cwd=tmp_path)
+    assert result.exit_code == 1
+    assert "ERROR" in result.stderr
     assert not (tmp_path / ".claude").exists()
 
 
 @pytest.mark.parametrize("field", ["global_path", "project_path", "filename_suffix"])
 def test_config_rejects_invalid_filesystem_paths(tmp_path, field):
     path = tmp_path / "config.yaml"
-    path.write_text(f'targets:\n  CLAUDE:\n    {field}: ".bad\\0path"\n')
+    path.write_text(f'targets:\n  CLAUDE:\n    {field}: ".bad\\0path"\n', encoding="utf-8")
     with pytest.raises(ConfigError):
         Config.load(path)
 
 
-def test_init_reports_write_failure(tmp_path, monkeypatch):
+def test_init_reports_write_failure(tmp_path, run_cli: RunCLI):
     root = tmp_path / "inputs"
-    root.write_text("This is a file, not a directory.")
-    monkeypatch.chdir(tmp_path)
-    result = CliRunner().invoke(app, ["init", "reviewer", "--project", "--source-dir", str(root)])
-    assert result.exit_code == 2
-    assert "ERROR" in result.output
-    assert root.read_text() == "This is a file, not a directory."
+    root.write_text("This is a file, not a directory.", encoding="utf-8")
+    result = run_cli("init", "reviewer", "--project", "--source-dir", str(root), cwd=tmp_path)
+    assert result.exit_code == 1
+    assert "ERROR" in result.stderr
+    assert root.read_text(encoding="utf-8") == "This is a file, not a directory."

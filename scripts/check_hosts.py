@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+from dataclasses import replace
 from pathlib import Path
 
 from supagents import core
@@ -23,33 +24,44 @@ HOSTS = {
 }
 
 
+def _is_unconfigured_mise_shim(command: str, error: subprocess.CalledProcessError) -> bool:
+    """Return True when PATH matched an inactive mise shim rather than a usable binary."""
+    if "mise/shims" not in Path(command).as_posix():
+        return False
+    stderr = error.stderr if isinstance(error.stderr, str) else ""
+    return "No version is set for shim:" in stderr
+
+
 def probe() -> bool:
     """Report versions and discovery; return false on a failed installed-host probe."""
     example = Path(__file__).resolve().parents[1] / "examples/reviewer.md"
+    example_text = example.read_text(encoding="utf-8")
+    if "name: reviewer\n" not in example_text:
+        raise RuntimeError("examples/reviewer.md must contain 'name: reviewer'")
+
     with tempfile.TemporaryDirectory(prefix="supagents-hosts-") as directory:
         project = Path(directory)
         root = project / ".agents/supagents"
         root.mkdir(parents=True)
         name = "supagents-compatibility-reviewer"
         (root / f"{name}.md").write_text(
-            example.read_text(encoding="utf-8").replace("name: reviewer\n", f"name: {name}\n"),
+            example_text.replace("name: reviewer\n", f"name: {name}\n", 1),
             encoding="utf-8",
         )
         built = core.build(
-            "project", config=Config(targets=DEFAULT_TARGETS), cwd=project, strict=True
+            "project", config=Config(targets=dict(DEFAULT_TARGETS)), cwd=project, strict=True
         )
         if built.fatal_errors or built.error_count or built.warning_count:
             raise RuntimeError("synthetic compatibility source did not compile cleanly")
-        # AGY 1.2.12's standalone listing observes global profiles. Compile that
-        # scope into a disposable home; never touch the user's installed agents.
+        # Standalone `agy agent` lists global profiles. Compile into a disposable
+        # HOME so this probe never touches the user's installed agents.
         probe_home = project / "home"
         agy_config = Config(
             targets={
                 **DEFAULT_TARGETS,
-                "AGY": DEFAULT_TARGETS["AGY"].model_copy(
-                    update={
-                        "global_path": probe_home / ".gemini/config/agents",
-                    }
+                "AGY": replace(
+                    DEFAULT_TARGETS["AGY"],
+                    global_path=probe_home / ".gemini/config/agents",
                 ),
             }
         )
@@ -80,8 +92,10 @@ def probe() -> bool:
                         cwd=project,
                         capture_output=True,
                         text=True,
+                        errors="replace",
                         check=True,
                         timeout=30,
+                        stdin=subprocess.DEVNULL,
                     )
                     record["version"] = version.stdout.strip().splitlines()[0]
                     if discovery is not None:
@@ -93,16 +107,22 @@ def probe() -> bool:
                             cwd=project,
                             capture_output=True,
                             text=True,
+                            errors="replace",
                             check=True,
                             timeout=30,
                             env=probe_env,
+                            stdin=subprocess.DEVNULL,
                         )
                         found = name in result.stdout
                         record["discovery"] = "passed" if found else "failed"
                         passed = passed and found
-                except (OSError, subprocess.SubprocessError, IndexError) as error:
-                    # Host dumps may include personal configuration. Report only
-                    # the error class, never captured stdout/stderr or exception text.
+                except subprocess.CalledProcessError as error:
+                    if not _is_unconfigured_mise_shim(command, error):
+                        # Host dumps may include personal configuration. Report only
+                        # the error class, never captured stdout/stderr or exception text.
+                        record["probe_error"] = type(error).__name__
+                        passed = False
+                except (OSError, subprocess.SubprocessError, IndexError, UnicodeError) as error:
                     record["probe_error"] = type(error).__name__
                     passed = False
             print(json.dumps(record))  # noqa: T201

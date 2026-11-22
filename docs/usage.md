@@ -2,29 +2,69 @@
 
 ## Source contract
 
-Sources are UTF-8 Markdown files with YAML frontmatter and a body (empty child bodies are allowed when inheriting a non-empty preamble partial without `{{BODY}}`). Filenames match `[a-z0-9][a-z0-9_-]*.md`; discovery reads the selected directory without recursion. Files starting with `_` (`_[a-z0-9][a-z0-9_-]*.md`) are partials rather than standalone sources. A BOM and CRLF line endings are accepted.
+Sources are UTF-8 Markdown files with YAML frontmatter and a body (empty child bodies are allowed when inheriting a non-empty preamble partial without `{{BODY}}`). Filenames match `[a-z0-9][a-z0-9_-]*.md`; discovery reads the selected directory without recursion. Files starting with `_` (`_[a-z0-9][a-z0-9_-]*.md`) are partials rather than standalone sources. BOM and CRLF line endings are accepted.
 
-Lowercase and camelCase frontmatter fields are shared (`extends` is reserved for partial inheritance and omitted from outputs). Uppercase keys select targets; an empty block (`CODEX: {}`) enables a target, and `CODEX: false` omits a target (either standalone or suppressing an inherited target). Target metadata overrides shared fields without a deep merge. Keep host-specific settings inside their target blocks. Unknown targets and directives produce warnings on concrete sources; on `_*.md` partials, any target warning or error fails the partial itself before inheritance. Malformed `OUTPUT` values are errors.
+Frontmatter fields split into shared metadata and target blocks:
+
+- **Shared keys**: lowercase and camelCase fields propagate to every target. `extends` is reserved for partial inheritance and omitted from outputs.
+- **Target blocks**: uppercase keys select targets. An empty block (`CODEX: {}`) enables a target; `CODEX: false` disables it (standalone or suppressing an inherited target).
+- **Overrides & validation**: target metadata overrides shared keys without deep merging. Unknown targets and directives warn on concrete sources, fail closed on `_*.md` partials, and malformed `OUTPUT` values are errors.
 
 Two uppercase directives are supported inside a target:
 
 - `APPEND_BODY`: append host-specific instructions after the shared body (chained base-then-child when inheriting).
-- `OUTPUT`: override the output file. Relative paths resolve beside the source; `~` expands to the current home. Paths outside the selected scope produce a warning; use only trusted sources and configuration.
+- `OUTPUT`: override the output file. Relative paths resolve beside the source; `~` expands to the current home. Paths outside the selected scope warn.
 
 ### Partial inheritance
 
-Put shared target permissions, metadata, and output contracts inside a `_*.md` partial in the same source directory, then inherit from concrete sources with `extends: _partial` or a left-to-right list `extends: [_a, _b]`. Ancestors are linearized in deduplicated post-order (left-to-right, diamond/duplicate references applied once) so shared bases do not clobber earlier sibling overrides or duplicate inherited text. Partials may leave their body empty (frontmatter-only), insert `{{BODY}}` once as a placement slot for the child body (non-slot sibling partials insert above `{{BODY}}` without consuming the slot), or supply a preamble prepended before the child body. Re-enabling a `TARGET: false` target later in a child starts from a fresh target block. Supagents rejects symlinked partials, path traversal, and inheritance cycles.
+Factor repeated target settings, permissions, and output contracts into `_*.md` partials in the same source directory.
 
-Codex output requires nonempty `name` and `description` strings and reserves `developer_instructions` for the body. TOML serialization preserves nested tables and multiline instructions; YAML values that TOML cannot represent, such as null, fail before any writes. Other metadata passes through unchanged: Supagents does not claim complete validation against each harness's evolving schema.
+`.agents/supagents/_readonly.md`:
+
+```markdown
+---
+CLAUDE:
+  model: inherit
+  tools: Read, Glob, Grep
+CODEX:
+  sandbox_mode: read-only
+---
+
+{{BODY}}
+
+## Output Contract
+
+Return findings with file:line evidence.
+```
+
+`.agents/supagents/security.md`:
+
+```markdown
+---
+extends: _readonly
+name: security
+description: Audit security boundaries.
+---
+
+Inspect inputs, secrets, and permissions.
+```
+
+Inheritance rules:
+
+- **Order & deduplication**: pass `extends: _partial` or a left-to-right list `extends: [_a, _b]`. Ancestors linearize in deduplicated post-order so shared bases never clobber sibling overrides or duplicate text.
+- **Body merging**: partials may be frontmatter-only, place `{{BODY}}` once as a child slot (non-slot siblings insert above `{{BODY}}` without consuming it), or supply a preamble prepended before the child body.
+- **Opt-outs & safety**: re-enabling a `TARGET: false` target later starts from a fresh block. Symlinked partials, path traversal, and inheritance cycles are rejected.
+
+Codex output requires nonempty `name` and `description` strings and reserves `developer_instructions` for the body. TOML serialization preserves nested tables and multiline instructions; YAML values that TOML cannot represent (such as `null`) fail before any writes. Other metadata passes through unchanged.
 
 ## Locations and precedence
 
-1. `--project` and `--global` explicitly select output scope and are mutually exclusive.
+1. `--project` (`-p`) and `--global` (`-g`) explicitly select output scope and are mutually exclusive.
 1. Otherwise, `.agents/supagents/` in the current directory selects project scope; absence selects global scope. Parent directories are not searched.
-1. `--source-dir PATH` overrides only source discovery, including for `init`, `list`, and `clean`. Specify scope explicitly for custom layouts. A missing explicit source directory is an error except when `init` creates it.
-1. `--config FILE` selects configuration. Otherwise, read `$XDG_CONFIG_HOME/supagents/config.yaml`, falling back to `~/.config/supagents/config.yaml`.
-1. Configuration overrides bundled target settings per field. Invalid files fail; an absent default configuration uses bundled defaults. Config target names are case-insensitive.
-1. Source `OUTPUT` takes precedence over the configured directory and suffix.
+1. `--source-dir PATH` overrides only source discovery, including for `init`, `list`, and `clean`. A missing explicit source directory fails except when `init` creates it.
+1. `--config FILE` (`-c`) selects configuration; otherwise Supagents reads `$XDG_CONFIG_HOME/supagents/config.yaml` (fallback `~/.config/supagents/config.yaml`).
+1. Configuration overrides bundled target settings per field. Invalid files, broken default config symlinks, or duplicate case-colliding target keys fail closed.
+1. Source `OUTPUT` takes precedence over configured directories and suffixes.
 
 | Target     | Global directory             | Format / suffix        |
 | ---------- | ---------------------------- | ---------------------- |
@@ -55,7 +95,7 @@ targets:
     body_key: instructions
 ```
 
-Custom targets need both paths and a name containing a letter with an uppercase form, so their source blocks can be distinguished from shared metadata. `format` defaults to `markdown`, `filename_suffix` to `.md`, and TOML `body_key` to `developer_instructions`. Paths in `project_path` resolve from the current working directory, not the config file. Prefer relative project paths; sources and configuration are trusted local inputs, not sandboxed capabilities.
+Custom targets need both paths and a name containing a letter with an uppercase form. `format` defaults to `markdown`, `filename_suffix` to `.md`, and TOML `body_key` to `developer_instructions`. Relative `project_path` values resolve from the current working directory (`~` expands in both scopes).
 
 ## Chezmoi integration
 
@@ -66,44 +106,54 @@ supagents build --project --source-dir dot_agents/supagents --config supagents.y
 supagents check --strict --project --source-dir dot_agents/supagents --config supagents.yaml
 ```
 
-Exclude `supagents.yaml` from chezmoi deployment. Keep generated native files tracked and exempt them from other formatters; use the second command as a repository gate. Preview and apply the affected targets through chezmoi. Generation should not run as an installation hook or write directly into the deployed home while editing the source repository.
+Exclude `supagents.yaml` from chezmoi deployment. Keep generated native files tracked and exempt them from other formatters; use the second command as a repository gate. Preview and apply the affected targets through chezmoi without writing directly into the deployed home while editing the source repository.
 
-## Verification and previews
+## Verification, previews, and automation
 
 ```bash
 supagents init reviewer --project --target claude --target codex
 supagents build --project --diff
 supagents build --project --strict
-supagents check --project --strict --diff
+supagents check --project --strict --json
 ```
 
-`init --target` is repeatable and case-insensitive, accepts custom targets from `--config`, and rejects unknown target names. With no target filter it retains the nine bundled targets for compatibility. Names and target keys are serialized as YAML strings, including names such as `true` or `123`. Scaffolds contain TODO instructions; use the [reviewer example](../examples/reviewer.md) as a practical starting point and retain the targets you need.
+- **Scaffolding (`init`)**: `--target` is repeatable, case-insensitive, accepts custom targets from `--config`, and rejects unknown targets. Without `--target`, all nine bundled targets are included. `-n`/`--dry-run` previews creation without writing. Start from the [reviewer example](../examples/reviewer.md) for practical defaults.
+- **Previews (`--diff`, `-n`/`--dry-run`)**: `build --diff` previews additions and edits as unified diffs without writing; `check --diff` also previews obsolete files as removals. Output is plain text with zero emoji or markup rewriting.
+- **Machine output (`--json`, `-q`/`--quiet`)**: all five commands accept `--json` (one schema-stable JSON object on `stdout`, empty `stdout` + `stderr` diagnostics on fatal failure) and `-q`/`--quiet` to suppress routine status lines. Color follows TTY, `NO_COLOR`, and `TERM=dumb`.
+- **Checks (`check`, `build --check`)**: fail on missing, modified, or obsolete outputs; `--strict` also fails on warnings. Non-strict checks skip orphan scanning when warnings exist. Checks require an existing source directory (empty is valid).
+- **Orphan scope**: orphan scans inspect marker-bearing regular files directly in selected targets' configured output directories, preserving handwritten files and symlinks. Unreadable directories fail closed.
 
-`build --diff` previews additions and edits as unified content diffs, without writing. `check --diff` also previews obsolete files as removals; it never removes them. `--diff` can accompany `--dry-run` or `--check`. Every command reports explicit or auto-detected scope and the source directory; previews show source → target → output mappings.
+## Safety guarantees
 
-`check` and `build --check` both fail on missing, modified, or obsolete generated outputs. `--strict` additionally fails on source warnings, including unknown target/directive names. `build --strict` rejects warnings before any writes. A warning during a non-strict check skips orphan scanning because ownership is ambiguous; use `check --strict` in CI. Checks require an existing source directory, even with default paths; an empty existing directory is valid.
+- **Validate before writing**: builds validate every source, UTF-8 encoding, output collision, and existing-file ownership before writing. Each file is written via same-directory temp file + `fsync` + atomic rename, honoring umask.
+- **Ownership markers**: only marker-bearing regular files are overwritten; handwritten files, symlinks, directories, and FIFOs fail closed. Back up and reconcile handwritten files into sources instead of adding markers manually.
+- **Safe cleanup (`clean`)**: removes only marker-bearing orphan files in configured output directories, preserving handwritten files, symlinks, sources, and partials (even when directories overlap). Invalid or missing sources abort cleanup with exact failing paths; auto-detected global cleanup requires `--global`, `--yes` (`-y`), or interactive TTY confirmation (`--no-input` disables prompts).
+- **Safe scaffolding (`init`)**: refuses source symlinks even with `--force` and writes regular files atomically.
 
-Orphan checks and cleanup inspect marker-bearing regular files directly in the selected targets' configured output directories. They cannot locate old directories after configuration changes or obsolete custom `OUTPUT` paths elsewhere. Unreadable output directories/files fail the scan. Handwritten files and symlinks are preserved. Missing or modified expected outputs are checked wherever their current `OUTPUT` points.
+## Exit codes
 
-## Safety and migration from 1.2
+| Code  | Meaning                                                                                                                 |
+| ----- | ----------------------------------------------------------------------------------------------------------------------- |
+| `0`   | Success (including explicit `-h`/`--help`, `--version`, and clean `BrokenPipeError`)                                    |
+| `1`   | Operational failure (drift, config/source/partial/I/O error, `--strict` warning, unconfirmed global `clean`)            |
+| `2`   | CLI usage error (unknown flag, unknown `--target`, mutually exclusive options, invalid `init` name, missing subcommand) |
+| `130` | Interrupted (`SIGINT`)                                                                                                  |
 
-Builds validate every source, rendered output's UTF-8 encoding, output collision, and existing-file ownership before writing. Invalid sources do not permit partial successful writes. Each file is replaced atomically, but the entire build is not a transaction: filesystem failures can leave a partially written set, and concurrent writers are not locked. Rerun after fixing the reported error.
+## Upgrading
 
-Only marker-bearing generated files can be replaced. An existing handwritten file or symlink causes failure even in `--check`. Move it to a deliberate backup and reconcile its content into the source before generating; no overwrite flag bypasses ownership. The generated marker is an ownership convention, not tamper protection. Parent directories may be symlinks; inspect configured paths before building.
+- **From 1.6 (upcoming 2.0 CLI contract)**: operational, config, parse, and I/O failures now exit `1`, reserving exit `2` for CLI usage errors. Auto-detected global `clean` now requires `--global`, `--yes`, or TTY confirmation. Stdlib `argparse` and `dataclasses` replaced `typer`, `rich`, and `pydantic`.
+- **From 1.5 to 1.6**: lowercase `extends` is reserved for `_*.md` partials (non-`_*` values fail with `ParseError`), `_*.md` files are excluded from concrete sources, and warnings/errors inside partials fail closed.
+- **From 1.2/1.3 to 1.4+**: `build --check` rejects obsolete outputs and missing source directories, `list` fails on invalid sources, and invalid config shapes fail closed instead of falling back to defaults.
 
-`clean` removes only marker-bearing orphan files directly in configured output directories, never handwritten files, symlinks, or canonical sources, even when source and output directories overlap. Missing or unreadable source directories, broken source links, invalid sources, and source warnings abort cleanup. An existing empty source directory deliberately permits orphan cleanup. It does not discover old directories after configuration changes, nested `OUTPUT` files, or custom paths outside those directories. Preview first; move obsolete files separately when migrating paths.
-
-`init` refuses source symlinks even with `--force` and replaces regular files atomically. Invalid output paths and filesystem errors produce CLI diagnostics instead of tracebacks.
-
-Build/check exit 0 on success, 1 for target errors, check drift, or warnings with `--strict`, and 2 for fatal source/configuration/I/O errors. Since 1.4, `build --check` also rejects obsolete outputs and missing source directories; use `clean --dry-run` to review obsolete files before cleanup. `list` now fails for invalid sources. Invalid configuration shapes no longer silently fall back to defaults. An unknown source target is a warning unless `--strict` is selected; an unknown CLI `--target` is always an error.
+See [CHANGELOG.md](../CHANGELOG.md) for full release notes.
 
 ## Native behavior and verification
 
-The [compatibility matrix](compatibility.md) records tested versions and separates compiler, discovery, and permission evidence. Use host documentation for fields and discovery: [Antigravity](https://antigravity.google/docs/subagents/), [Claude Code](https://code.claude.com/docs/en/sub-agents), [Codex](https://learn.chatgpt.com/docs/agent-configuration/subagents), [Copilot](https://docs.github.com/en/copilot/reference/custom-agents-configuration), [Cursor](https://cursor.com/docs/subagents), [Gemini CLI](https://geminicli.com/docs/core/subagents/), [Grok Build](https://docs.x.ai/build/features/subagents), [Kilo Code](https://kilo.ai/docs/customize/custom-subagents), and [OpenCode](https://opencode.ai/docs/agents/).
+The [compatibility matrix](compatibility.md) records tested versions and separates compiler, discovery, and permission evidence. Consult upstream host documentation for fields and discovery: [Antigravity](https://antigravity.google/docs/subagents/), [Claude Code](https://code.claude.com/docs/en/sub-agents), [Codex](https://learn.chatgpt.com/docs/agent-configuration/subagents), [Copilot](https://docs.github.com/en/copilot/reference/custom-agents-configuration), [Cursor](https://cursor.com/docs/subagents), [Gemini CLI](https://geminicli.com/docs/core/subagents/), [Grok Build](https://docs.x.ai/build/features/subagents), [Kilo Code](https://kilo.ai/docs/customize/custom-subagents), and [OpenCode](https://opencode.ai/docs/agents/).
 
-Avoid pinning models unless the task needs one. Omission or `inherit` is host-specific. Tool allowlists use native names; shell access can write files even if the edit tool is absent. Codex sandbox defaults can be overridden by parent runtime policy. Agent instructions alone are not access control.
+Avoid pinning models unless the task needs one; omission and `inherit` are host-specific. Tool allowlists use native names, shell tools can still mutate files without an edit tool, and Codex sandbox defaults can be overridden by parent runtime policy. Agent instructions alone are not access control.
 
-Give the child the exact task, relevant files/diff, acceptance criteria, and expected result. Parent-context inheritance and delegation routing differ across harnesses. Verify generated syntax, native discovery, and a bounded runtime task separately; compilation does not prove that a host selects an agent, applies its tool restrictions, or succeeds with its provider.
+Give each child agent the exact task, relevant files or diff, acceptance criteria, and expected output format. Verify generated syntax, native discovery, and a bounded runtime task separately.
 
 ## Plugins and hooks
 
@@ -119,4 +169,4 @@ gemini extensions install https://github.com/fmind/agent-supagents
 copilot plugin install fmind/agent-supagents
 ```
 
-The `.pre-commit-hooks.yaml` hook runs `supagents build` for conventional `.agents/supagents/*.md` sources. Custom layouts must override `args` and `files`. Pin a released tag or immutable revision in downstream configuration. This repository uses mise and Lefthook for its own development checks.
+The `.pre-commit-hooks.yaml` hook runs `supagents build` for conventional `.agents/supagents/*.md` and `_*.md` sources. Custom layouts must override `args` and `files`. Pin a released tag or immutable revision in downstream configuration.

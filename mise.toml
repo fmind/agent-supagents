@@ -1,10 +1,11 @@
 # :schema https://mise.jdx.dev/schema/mise.json
-# https://mise.jdx.dev/configuration.html
-min_version = "2026.11.8"
+# Docs: https://mise.jdx.dev/configuration.html
+min_version = "2026.11.12"
 
 [settings]
 lockfile = true
 lockfile_platforms = ["linux-arm64", "linux-x64", "macos-arm64"]
+minimum_release_age = "0d"
 
 [settings.task]
 run_auto_install = false
@@ -13,65 +14,142 @@ quiet = true
 [task_config]
 dir = "{{config_root}}"
 
-[env]
-UV_PROJECT = "{{config_root}}"
-
 [tools]
 betterleaks = "1.10.1"
-dprint = "0.64.3"
+dprint = "0.65.0"
 jactionlint = "2.6.0"
 lefthook = "2.2.2"
 # Match the workstation Python 3.14 minor; CI also tests Python 3.12 and 3.15.
 python = "3.14.10"
-uv = "0.13.8"
+shellcheck = "0.11.0"
+uv = "0.13.9"
 
 [tasks.all]
-description = "Format, check, audit, test, and build"
-run = ["mise run format", "mise run check", "mise run audit", "mise run test", "mise run build"]
+alias = "a"
+description = "Check, test, and build the project without rewriting source files"
+run = ["mise run check", "mise run test", "mise run build"]
 
 [tasks.install]
-description = "Install the locked tools, dependencies, and local hooks"
+alias = "i"
+description = "Install locked development dependencies and Git hooks"
 run = [
-  "mise install --locked",
   "UV_MALWARE_CHECK=1 uv sync --locked --preview-features malware-check",
   "lefthook install",
 ]
 
 [tasks.format]
-description = "Fix lint and format Python, Markdown, JSON, TOML, and YAML"
-run = ["uv run --locked ruff check --fix .", "uv run --locked ruff format .", "dprint fmt"]
+alias = "f"
+description = "Format all Python sources and project documents"
+depends = ["format:dprint", "format:python"]
+
+[tasks."format:dprint"]
+description = "Format JSON, Markdown, TOML, and YAML with dprint"
+run = "dprint fmt --allow-no-files"
+
+[tasks."format:python"]
+description = "Sort imports and format Python sources, or only the given files"
+usage = 'arg "[files]..." default="."'
+run = '''
+set -eu
+eval "set -- ${usage_files:-}"
+uv run --locked ruff check --select=I --fix --force-exclude -- "$@"
+uv run --locked ruff format --force-exclude -- "$@"
+'''
 
 [tasks.check]
-description = "Check lockfile, formatting, lint, types, metadata, and workflows"
-run = [
-  "uv lock --check",
-  "uv run --locked ruff format --check .",
-  "uv run --locked ruff check .",
-  "uv run --locked ty check",
-  "uv run --locked validate-pyproject pyproject.toml",
-  "uv run --locked python scripts/verify_release.py",
-  "dprint check",
-  "jactionlint --profile pedantic",
-  "betterleaks dir . --unsafe-auto-load-config --redact=100 --verbose --no-banner",
+alias = "c"
+description = "Run all static checks in parallel"
+depends = ["check:local", "check:network"]
+
+[tasks."check:local"]
+description = "Run offline static checks (pre-commit)"
+depends = [
+  "check:actions",
+  "check:deps",
+  "check:format",
+  "check:leaks",
+  "check:lint",
+  "check:release",
+  "check:types",
 ]
+
+[tasks."check:network"]
+description = "Run network vulnerability checks (pre-push)"
+depends = ["check:vuln"]
+
+[tasks."check:actions"]
+alias = "ca"
+description = "Lint GitHub Actions workflows and shell snippets offline (jactionlint + shellcheck)"
+run = "jactionlint --profile pedantic"
+
+[tasks."check:actions:online"]
+description = "Audit GitHub Actions workflows with online checks"
+run = "jactionlint --online=strict --strict-exit"
+
+[tasks."check:deps"]
+alias = "cd"
+description = "Find missing, unused, transitive, and misplaced dependencies (deptry)"
+run = "uv run --locked deptry ."
+
+[tasks."check:format"]
+alias = "cf"
+description = "Check formatting, project metadata, and lockfile"
+run = [
+  "uv run --locked validate-pyproject pyproject.toml",
+  "uv run --locked ruff format --check .",
+  "uv lock --check",
+  "dprint check",
+]
+
+[tasks."check:leaks"]
+alias = "cs"
+description = "Scan working-tree files, including untracked files, for leaked secrets"
+run = "betterleaks dir . --config .betterleaks.toml --redact=100 --verbose --no-banner"
 
 [tasks."check:leaks:full"]
 description = "Scan the complete Git history for leaked secrets"
-run = "betterleaks git --unsafe-auto-load-config --redact=100 --verbose --no-banner"
+run = "betterleaks git --config .betterleaks.toml --redact=100 --verbose --no-banner"
 
-[tasks.test]
-description = "Run tests with the coverage gate"
-run = "uv run --locked pytest -q"
+[tasks."check:lint"]
+alias = "cl"
+description = "Lint Python sources (ruff)"
+run = "uv run --locked ruff check ."
+
+[tasks."check:release"]
+description = "Verify package and plugin manifest consistency"
+run = "uv run --locked python scripts/verify_release.py"
+
+[tasks."check:types"]
+alias = "ct"
+description = "Type-check Python sources (ty)"
+run = "uv run --locked ty check"
+
+[tasks."check:vuln"]
+alias = "cv"
+description = "Audit locked Python dependencies for known vulnerabilities"
+run = "uv audit --preview-features audit-command --locked"
 
 [tasks."check:hosts"]
 description = "Report installed host versions and synthetic agent discovery (no model calls)"
 run = "uv run --locked python scripts/check_hosts.py"
 
-[tasks.audit]
-description = "Audit locked Python dependencies for known vulnerabilities"
-run = "uv audit --preview-features audit-command --locked"
+[tasks.test]
+alias = "t"
+description = "Run offline tests with the coverage gate"
+run = "uv run --locked pytest -q --cov --cov-report="
+
+[tasks.coverage]
+alias = "v"
+description = "Write an HTML coverage report"
+depends = ["test"]
+run = "uv run --locked coverage html"
+
+[tasks."report:coverage"]
+description = "Show per-file coverage from the last test run without rerunning tests"
+run = "uv run --locked coverage report"
 
 [tasks.build]
+alias = "b"
 description = "Build the documentation site and Python distributions"
 depends = ["build:docs", "build:package"]
 
@@ -84,16 +162,18 @@ description = "Preview the documentation site (override port via PORT=8001)"
 run = "uv run --locked zensical serve -a 127.0.0.1:${PORT:-8000}"
 
 [tasks."build:package"]
-description = "Build distributions and smoke-test the wheel in isolation"
+description = "Build distributions and smoke-test the wheel with hash-locked runtime dependencies"
 run = [
   "uv build --out-dir dist --clear --no-sources",
-  "uv run --isolated --no-project --with dist/supagents-*.whl supagents --version",
+  "uv run --locked python scripts/smoke_wheel.py",
 ]
 
 [tasks.clean]
+alias = "n"
 description = "Remove build artifacts and coverage files"
 run = "rm -rf .cache .coverage .coverage.* .pytest_cache .ruff_cache .ty_cache build dist htmlcov site"
 
 [tasks.upgrade]
-description = "Refresh locked Python dependencies within their constraints"
-run = "UV_MALWARE_CHECK=1 uv lock --upgrade --preview-features malware-check"
+alias = "u"
+description = "Upgrade locked Python dependencies within their constraints, refusing known malware"
+run = "UV_MALWARE_CHECK=1 uv sync --upgrade --preview-features malware-check"

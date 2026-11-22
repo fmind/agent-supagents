@@ -24,12 +24,8 @@ def _parse_skill(path: Path) -> tuple[dict[str, object], str]:
     return frontmatter, parts[1]
 
 
-def test_user_skill_contract() -> None:
-    skill_dirs = sorted(p for p in (REPO_ROOT / "skills").iterdir() if p.is_dir())
-    assert [p.name for p in skill_dirs] == ["supagent"]
-    skill_path = skill_dirs[0] / "SKILL.md"
-    fm, body = _parse_skill(skill_path)
-    assert fm["name"] == "supagent"
+def _assert_skill_frontmatter(fm: dict[str, object], expected_name: str) -> None:
+    assert fm["name"] == expected_name
     assert fm["license"] == "MIT"
     desc = fm["description"]
     assert isinstance(desc, str)
@@ -38,6 +34,13 @@ def test_user_skill_contract() -> None:
     assert isinstance(metadata, dict)
     assert set(metadata) >= REQUIRED_METADATA_KEYS
     assert metadata["kind"] in {"task", "connector", "collection"}
+
+
+def test_user_skill_contract() -> None:
+    skill_dirs = sorted(p for p in (REPO_ROOT / "skills").iterdir() if p.is_dir())
+    assert [p.name for p in skill_dirs] == ["supagent"]
+    fm, body = _parse_skill(skill_dirs[0] / "SKILL.md")
+    _assert_skill_frontmatter(fm, "supagent")
     # Packaged /supagent must stay self-contained when installed standalone.
     assert not re.search(r"\]\([^)]*\.\./", body)
 
@@ -48,14 +51,7 @@ def test_repo_maintainer_skills_and_claude_bridge() -> None:
     assert [p.name for p in skill_dirs] == ["harnesses", "release"]
     for directory in skill_dirs:
         fm, _ = _parse_skill(directory / "SKILL.md")
-        assert fm["name"] == directory.name
-        assert fm["license"] == "MIT"
-        desc = fm["description"]
-        assert isinstance(desc, str)
-        assert 1 <= len(desc.strip()) <= 180
-        metadata = fm["metadata"]
-        assert isinstance(metadata, dict)
-        assert set(metadata) >= REQUIRED_METADATA_KEYS
+        _assert_skill_frontmatter(fm, directory.name)
 
     bridge = REPO_ROOT / ".claude" / "skills"
     assert bridge.is_symlink()
@@ -69,7 +65,7 @@ def test_verify_release_passes_on_repository() -> None:
 
 def _copy_release_fixture(
     tmp_path: Path,
-    version: str = "1.5.0",
+    version: str = "1.6.0",
     changelog: str | None = None,
 ) -> Path:
     (tmp_path / ".claude-plugin").mkdir(parents=True)
@@ -98,16 +94,16 @@ def test_verify_release_notes_and_errors(
 ) -> None:
     changelog = (
         "# Changelog\n\n"
-        "## [1.5.0] - 2026-11-15\n\n"
-        "### 🚀 Features\n\n"
-        "- Add /supagent.\n\n"
-        "## [1.4.1] - 2026-10-06\n\n"
-        "- Old.\n"
+        "## [1.6.0] - 2026-11-16\n\n"
+        "### Features\n\n"
+        "- Add partials.\n\n"
+        "## Older notes\n\n"
+        "- Not part of 1.6.0.\n"
     )
-    root = _copy_release_fixture(tmp_path, version="1.5.0", changelog=changelog)
+    root = _copy_release_fixture(tmp_path, version="1.6.0", changelog=changelog)
 
-    assert verify_release.main(["v1.5.0", "--root", str(root), "--notes"]) == 0
-    assert capsys.readouterr().out.strip() == "### 🚀 Features\n\n- Add /supagent."
+    assert verify_release.main(["v1.6.0", "--root", str(root), "--notes"]) == 0
+    assert capsys.readouterr().out.strip() == "### Features\n\n- Add partials."
 
     assert verify_release.main(["v1.4.9", "--root", str(root)]) == 1
     assert "does not match" in capsys.readouterr().err
@@ -115,15 +111,22 @@ def test_verify_release_notes_and_errors(
     assert verify_release.main(["--root", str(root), "--notes"]) == 1
     assert "--notes requires a TAG" in capsys.readouterr().err
 
+    dup_log = _copy_release_fixture(
+        tmp_path / "dup",
+        version="1.6.0",
+        changelog="# Changelog\n\n## [1.6.0]\n- a\n\n## [1.6.0]\n- b\n",
+    )
+    assert verify_release.main(["v1.6.0", "--root", str(dup_log)]) == 1
+    assert "duplicate" in capsys.readouterr().err
+
     empty_log = _copy_release_fixture(
         tmp_path / "empty",
-        version="1.5.0",
-        changelog="# Changelog\n\n## [1.5.0] - 2026-11-15\n\n## [1.4.1]\n- x\n",
+        version="1.6.0",
+        changelog="# Changelog\n\n## [1.6.0] - 2026-11-16\n\n## [1.5.0]\n- x\n",
     )
-    assert verify_release.main(["v1.5.0", "--root", str(empty_log)]) == 1
-    assert "non-empty ## [1.5.0]" in capsys.readouterr().err
+    assert verify_release.main(["v1.6.0", "--root", str(empty_log)]) == 1
+    assert "non-empty ## [1.6.0]" in capsys.readouterr().err
 
-    bad_plugin = '{"version": "0.0.1", "description": "bad"}'
-    (root / "plugin.json").write_text(bad_plugin, encoding="utf-8")
+    (root / "plugin.json").write_bytes(b"\xff\xfe")
     assert verify_release.main(["--root", str(root)]) == 1
-    assert "plugin.json" in capsys.readouterr().err
+    assert "invalid JSON" in capsys.readouterr().err

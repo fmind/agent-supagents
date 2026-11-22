@@ -1,4 +1,4 @@
-# https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax
+# Docs: https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax
 name: Security
 on:
   schedule:
@@ -14,9 +14,9 @@ concurrency:
   cancel-in-progress: true
 jobs:
   scan:
-    name: Full-history and vulnerability scan
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    name: Full-history, vulnerability, and workflow scan
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
     steps:
       - name: Checkout complete history
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -24,12 +24,17 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Set up mise tools
-        uses: jdx/mise-action@d5574b52816a478f9d4e6529a3f6ff17a8a36785 # v5.2.8
+        uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
         with:
-          version: 2026.11.8
+          version: 2026.11.12
           cache: true
       - name: Scan complete Git history
         run: mise run check:leaks:full
       - name: Audit locked dependencies
-        if: ${{ !cancelled() }}
-        run: mise run audit
+        run: mise run check:network
+      - name: Audit workflows online
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: mise run check:actions:online
+      - name: Check lowest direct runtime dependencies
+        run: uv run --isolated --resolution lowest-direct --no-dev --with 'pytest>=9.2' --with 'pytest-socket>=0.8.1' --with 'pytest-timeout>=2.4.0' --python 3.12 pytest -q

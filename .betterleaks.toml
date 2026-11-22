@@ -1,0 +1,5 @@
+# Docs: https://github.com/betterleaks/betterleaks/blob/v1.x/docs/config.md
+title = "agent-supagents"
+
+[extend]
+useDefault = true

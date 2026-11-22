@@ -21,16 +21,9 @@ watch = ["README.md"]
 variant = "modern"
 language = "en"
 features = [
-  "content.action.copy",
   "content.code.copy",
   "content.code.select",
-  "content.tooltips",
-  "navigation.instant",
-  "navigation.instant.prefetch",
-  "navigation.instant.progress",
   "navigation.top",
-  "navigation.tracking",
-  "search.highlight",
   "toc.follow",
 ]
 
@@ -69,34 +62,14 @@ link = "https://github.com/fmind/agent-supagents"
 name = "Source repository"
 
 [project.markdown_extensions]
-abbr = {}
-admonition = {}
-attr_list = {}
-def_list = {}
-footnotes = {}
-md_in_html = {}
 tables = {}
 toc.permalink = true
-pymdownx.betterem = {}
-pymdownx.details = {}
 pymdownx.highlight.anchor_linenums = true
 pymdownx.highlight.line_spans = "__span"
 pymdownx.highlight.pygments_lang_class = true
-pymdownx.inlinehilite = {}
-pymdownx.keys = {}
-pymdownx.mark = {}
-pymdownx.smartsymbols = {}
 pymdownx.snippets.base_path = ["."]
 pymdownx.snippets.check_paths = true
 pymdownx.superfences = {}
-pymdownx.tabbed.alternate_style = true
-pymdownx.tabbed.combine_header_slug = true
-pymdownx.tilde = {}
-
-[project.plugins.llmstxt]
-markdown_description = "Supagents compiles one Markdown role file into native subagent profiles across coding harnesses."
-full_output = "llms-full.txt"
-sections = { "Documentation" = ["index.md"] }
 
 [project.plugins.social]
 

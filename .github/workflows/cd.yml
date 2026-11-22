@@ -1,4 +1,4 @@
-# https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax
+# Docs: https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax
 name: CD
 on:
   push:
@@ -23,7 +23,7 @@ jobs:
   build:
     name: Build distributions
     needs: ci
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     permissions:
       contents: read
@@ -33,9 +33,9 @@ jobs:
         with:
           persist-credentials: false
       - name: Set up mise tools
-        uses: jdx/mise-action@d5574b52816a478f9d4e6529a3f6ff17a8a36785 # v5.2.8
+        uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
         with:
-          version: 2026.11.8
+          version: 2026.11.12
           cache: false
       - name: Verify release manifests and changelog
         env:
@@ -58,7 +58,7 @@ jobs:
   publish:
     name: Publish to PyPI
     needs: build
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     environment:
       name: pypi
@@ -91,7 +91,7 @@ jobs:
   release:
     name: Publish GitHub release
     needs: publish
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     permissions:
       contents: write # Publish the GitHub release after PyPI succeeds.

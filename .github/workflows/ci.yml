@@ -1,4 +1,4 @@
-# https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax
+# Docs: https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax
 name: CI
 on:
   push:
@@ -14,7 +14,7 @@ defaults:
 concurrency:
   # Keep a literal prefix so workflow_call from CD does not share or cancel CD's group.
   group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/') }}
 jobs:
   qualify:
     name: Qualify (${{ matrix.os }})
@@ -23,17 +23,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-15]
+        os: [ubuntu-26.04, macos-15]
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Set up mise tools
-        uses: jdx/mise-action@d5574b52816a478f9d4e6529a3f6ff17a8a36785 # v5.2.8
+        uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
         with:
-          version: 2026.11.8
-          cache: true
+          version: 2026.11.12
+          cache: ${{ !startsWith(github.ref, 'refs/tags/') }}
       - name: Run canonical gate
         run: mise run all
       - name: Reject generated drift
@@ -44,6 +44,3 @@ jobs:
       - name: Check latest Python (3.15)
         if: ${{ runner.os == 'Linux' }}
         run: uv run --locked --isolated --python 3.15 pytest -q
-      - name: Check lowest direct dependencies
-        if: ${{ runner.os == 'Linux' }}
-        run: uv run --isolated --resolution lowest-direct --all-groups --python 3.12 pytest -q

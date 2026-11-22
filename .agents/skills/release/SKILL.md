@@ -7,7 +7,7 @@ metadata:
   author: Médéric HURIER (Fmind)
   source: github.com/fmind/agent-supagents/tree/main/.agents/skills/release
   created: "2026-11-15"
-  updated: "2026-11-15"
+  updated: "2026-11-22"
 ---
 
 # Release
@@ -22,7 +22,7 @@ One owner instruction to release authorizes the end-to-end flow: bump manifests,
    - Run `uv version X.Y.Z` to update `pyproject.toml` and `uv.lock`.
    - Set `"version": "X.Y.Z"` in `.claude-plugin/plugin.json`, `gemini-extension.json`, and `plugin.json`.
 1. Hand-curate `CHANGELOG.md` (`## [X.Y.Z] - YYYY-MM-DD` UTC date); never overwrite prior entries with `git-cliff -o`.
-1. Qualify locally before committing:
+1. Qualify locally before committing, and refresh `docs/compatibility.md` with observed host versions if `check:hosts` output changed:
    ```bash
    uv run --locked python scripts/verify_release.py "vX.Y.Z"
    mise run all

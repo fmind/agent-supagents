@@ -1,10 +1,25 @@
-# https://lefthook.dev/configuration/
+# yaml-language-server: $schema=https://json.schemastore.org/lefthook.json
+# Docs: https://lefthook.dev/configuration/
+
+glob_matcher: doublestar
 output: [summary, failure, execution_out]
+# Jobs run in list order: formatters fix and restage only the staged files, then checks validate the tree.
 pre-commit:
-  commands:
-    check:
-      run: mise run check
+  jobs:
+    - name: format docs and config
+      glob: "**/*.{json,jsonc,md,toml,yaml,yml}"
+      run: mise run format:dprint {staged_files}
+      stage_fixed: true
+    - name: format Python
+      glob: "**/*.py"
+      run: mise run format:python {staged_files}
+      stage_fixed: true
+    - name: check
+      run: mise run check:local
 pre-push:
-  commands:
-    test:
+  parallel: true
+  jobs:
+    - name: scan vulnerabilities
+      run: mise run check:network
+    - name: test
       run: mise run test

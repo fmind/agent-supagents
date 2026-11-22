@@ -30,7 +30,7 @@ def _read_json(path: Path) -> dict[str, Any]:
         raise ReleaseCheckError(f"missing manifest: {path}")
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
         raise ReleaseCheckError(f"invalid JSON in {path}: {error}") from error
     if not isinstance(data, dict):
         raise ReleaseCheckError(f"expected JSON object in {path}")
@@ -41,13 +41,18 @@ def extract_changelog_section(changelog_text: str, version: str) -> str:
     """Return the trimmed body of ``## [<version>]`` from CHANGELOG Markdown."""
     heading = f"## [{version}]"
     collecting = False
+    found_count = 0
     lines: list[str] = []
     for line in changelog_text.splitlines():
         if line == heading or line.startswith(f"{heading} "):
+            found_count += 1
+            if found_count > 1:
+                raise ReleaseCheckError(f"duplicate ## [{version}] section in CHANGELOG.md")
             collecting = True
             continue
-        if collecting and line.startswith("## ["):
-            break
+        if collecting and line.startswith("## "):
+            collecting = False
+            continue
         if collecting:
             lines.append(line)
     return "\n".join(lines).strip()
@@ -58,7 +63,7 @@ def verify_release(root: Path, tag: str | None = None) -> tuple[str, str]:
     pyproject_path = root / "pyproject.toml"
     try:
         pyproject = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
-    except (OSError, tomllib.TOMLDecodeError) as error:
+    except (OSError, UnicodeError, tomllib.TOMLDecodeError) as error:
         raise ReleaseCheckError(f"cannot read {pyproject_path}: {error}") from error
 
     project = pyproject.get("project")
@@ -115,7 +120,7 @@ def verify_release(root: Path, tag: str | None = None) -> tuple[str, str]:
     changelog_path = root / "CHANGELOG.md"
     try:
         changelog_text = changelog_path.read_text(encoding="utf-8")
-    except OSError as error:
+    except (OSError, UnicodeError) as error:
         raise ReleaseCheckError(f"cannot read {changelog_path}: {error}") from error
 
     notes = extract_changelog_section(changelog_text, version)
@@ -127,7 +132,7 @@ def verify_release(root: Path, tag: str | None = None) -> tuple[str, str]:
 def main(argv: Sequence[str] | None = None) -> int:
     """CLI entry point for release manifest and changelog verification."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("tag", nargs="?", help="Expected release tag, e.g. v1.5.0")
+    parser.add_argument("tag", nargs="?", help="Expected release tag, e.g. v1.6.0")
     parser.add_argument(
         "--root",
         type=Path,
