@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from supagents import core
+from supagents import core, sources
 from supagents.config import DEFAULT_TARGETS
 from tests.conftest import MakeSource, RunCLI
 
@@ -14,7 +14,7 @@ def test_selected_targets_round_trip(tmp_path: Path, run_cli: RunCLI) -> None:
     result = run_cli("init", "reviewer", "--project", "-t", "claude", "-t", "codex", cwd=tmp_path)
     assert result.exit_code == 0, result.output
     source = tmp_path / ".agents/supagents/reviewer.md"
-    assert set(core.parse_source(source, source.parent).targets) == {"CLAUDE", "CODEX"}
+    assert set(sources.parse_source(source, source.parent).targets) == {"CLAUDE", "CODEX"}
     assert "Scope: project (explicit)" in result.stderr
     assert run_cli("build", "--project", cwd=tmp_path).exit_code == 0
     result = run_cli("check", "--project", "--strict", cwd=tmp_path)
@@ -233,7 +233,7 @@ def test_documented_reviewer_compiles_for_every_bundled_target(tmp_path: Path) -
             assert metadata["sandbox_mode"] == "read-only"
             body = metadata["developer_instructions"]
         else:
-            _, body = core.split_frontmatter(plan.rendered)
+            _, body = sources.split_frontmatter(plan.rendered)
         assert body.strip() == plan.source.body.strip()
     checked = core.check("project", cwd=tmp_path, source_dir=source.parent)
     assert not checked.written

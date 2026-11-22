@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from supagents import cli
+from supagents import cli, core
 from tests.conftest import MakeSource, RunCLI
 
 
@@ -59,7 +59,9 @@ def test_module_invocation_works() -> None:
         [sys.executable, "-m", "supagents", "--version"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=True,
+        timeout=30,
         stdin=subprocess.DEVNULL,
     )
     assert result.stdout.startswith("supagents ")
@@ -70,7 +72,7 @@ def test_sigint_exits_130_and_broken_pipe_exits_0(
     run_cli: RunCLI, monkeypatch: pytest.MonkeyPatch, ci_workspace: Path
 ) -> None:
     monkeypatch.setattr(
-        cli.core,
+        core,
         "build",
         lambda **_kw: (_ for _ in ()).throw(KeyboardInterrupt()),
     )
@@ -78,7 +80,7 @@ def test_sigint_exits_130_and_broken_pipe_exits_0(
     assert interrupted.exit_code == 130
 
     monkeypatch.setattr(
-        cli.core,
+        core,
         "build",
         lambda **_kw: (_ for _ in ()).throw(BrokenPipeError()),
     )
@@ -119,6 +121,95 @@ def test_check_json_reports_orphan_scan_skipped(
     data = json.loads(checked.stdout)
     assert data["orphan_scan_skipped"] is True
     assert "Orphan scan skipped" in checked.stderr
+
+
+def test_check_json_reports_orphan_scan_skipped_on_source_errors(
+    run_cli: RunCLI, tmp_path: Path, make_source: MakeSource
+) -> None:
+    make_source("agent.md", "---\nCODEX: {}\n---\nBody.\n")
+    checked = run_cli("check", "--project", "--json", cwd=tmp_path)
+    assert checked.exit_code == 1
+    data = json.loads(checked.stdout)
+    assert data["ok"] is False
+    assert data["orphan_scan_skipped"] is True
+    assert data["errors"]
+    assert "Orphan scan skipped" in checked.stderr
+
+
+def test_clean_completes_all_unlinks_even_when_stdout_pipe_breaks(
+    run_cli: RunCLI, monkeypatch: pytest.MonkeyPatch, ci_workspace: Path, ci_outputs: list[Path]
+) -> None:
+    assert run_cli("build", "--project", cwd=ci_workspace).exit_code == 0
+    (ci_workspace / ".agents" / "supagents" / "code_investigator.md").unlink()
+    monkeypatch.setattr(cli, "_out", lambda *_a, **_k: (_ for _ in ()).throw(BrokenPipeError()))
+
+    result = run_cli("clean", "--project", cwd=ci_workspace)
+    assert result.exit_code == 0
+    assert "Traceback" not in result.stderr
+    for path in ci_outputs:
+        assert not path.exists(), path
+
+
+def test_tty_color_honors_no_color_term_dumb_and_json(
+    run_cli: RunCLI, ci_workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class FakeTTY(StringIO):
+        def isatty(self) -> bool:
+            return True
+
+    def invoke_tty(*args: str) -> tuple[int, str, str]:
+        out_tty, err_tty = FakeTTY(), FakeTTY()
+        monkeypatch.setattr(sys, "stdout", out_tty)
+        monkeypatch.setattr(sys, "stderr", err_tty)
+        monkeypatch.chdir(ci_workspace)
+        code = 0
+        try:
+            cli.main(list(args))
+        except SystemExit as exc:
+            code = exc.code if isinstance(exc.code, int) else 1
+        return code, out_tty.getvalue(), err_tty.getvalue()
+
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setenv("TERM", "xterm-256color")
+    code, out, _ = invoke_tty("build", "--project", "--dry-run")
+    assert code == 0
+    assert "\033[" in out
+
+    code, out, _ = invoke_tty("build", "--project", "--dry-run", "--json")
+    assert code == 0
+    assert "\033[" not in out
+    assert json.loads(out)["ok"] is True
+
+    monkeypatch.setenv("NO_COLOR", "1")
+    code, out, _ = invoke_tty("build", "--project", "--dry-run")
+    assert code == 0
+    assert "\033[" not in out
+
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setenv("TERM", "dumb")
+    code, out, _ = invoke_tty("build", "--project", "--dry-run")
+    assert code == 0
+    assert "\033[" not in out
+
+
+def test_broken_cwd_and_broken_stderr_pipe_handled_cleanly(
+    run_cli: RunCLI, ci_workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        Path, "cwd", classmethod(lambda _cls: (_ for _ in ()).throw(OSError("cwd gone")))
+    )
+    bad_cwd = run_cli("list", "--project")
+    assert bad_cwd.exit_code == 1
+    assert "cannot determine working directory" in bad_cwd.stderr
+    monkeypatch.undo()
+
+    class BrokenStderr(StringIO):
+        def write(self, _s: str) -> int:
+            raise BrokenPipeError("closed stderr")
+
+    monkeypatch.setattr(sys, "stderr", BrokenStderr())
+    monkeypatch.chdir(ci_workspace)
+    cli.main(["build", "--project", "--dry-run"])
 
 
 def test_init_rejects_existing_directory_even_with_force_and_dry_run(

@@ -1,14 +1,11 @@
 """Verify package/plugin manifests, release tags, and CHANGELOG notes."""
 
-from __future__ import annotations
-
 import argparse
 import json
 import sys
 import tomllib
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
 
 MANIFEST_FILES = (
     ".claude-plugin/plugin.json",
@@ -25,7 +22,7 @@ class ReleaseCheckError(Exception):
     """Raised when release metadata or changelog notes fail verification."""
 
 
-def _read_json(path: Path) -> dict[str, Any]:
+def _read_json(path: Path) -> dict[str, object]:
     if not path.is_file():
         raise ReleaseCheckError(f"missing manifest: {path}")
     try:

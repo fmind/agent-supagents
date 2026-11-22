@@ -152,7 +152,6 @@ select = [
   "YTT", # flake8-2020
 ]
 ignore = [
-  "ANN401", # any-type
   "TRY003", # long messages outside exception classes
 ]
 

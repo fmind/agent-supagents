@@ -23,6 +23,14 @@ def test_load_with_no_file_uses_defaults() -> None:
     assert config.targets["COPILOT"].filename_suffix == ".agent.md"
 
 
+def test_default_targets_and_config_targets_are_immutable() -> None:
+    cfg = Config(targets=DEFAULT_TARGETS)
+    with pytest.raises(TypeError):
+        DEFAULT_TARGETS["EXTRA"] = DEFAULT_TARGETS["CLAUDE"]  # ty: ignore[invalid-assignment]
+    with pytest.raises(TypeError):
+        cfg.targets["EXTRA"] = DEFAULT_TARGETS["CLAUDE"]  # ty: ignore[invalid-assignment]
+
+
 def test_default_targets_cover_all_nine_bundled_clis() -> None:
     assert set(DEFAULT_TARGETS) == {
         "AGY",

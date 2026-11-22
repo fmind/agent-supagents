@@ -38,7 +38,9 @@ def test_native_formats_preserve_body_and_nested_config(tmp_path):
     assert len(again.skipped_unchanged) == 3
     assert not again.written
     (root / "reviewer.md").unlink()
-    assert len(core.find_orphans("project", cwd=tmp_path, source_dir=root)) == 3
+    clean_plan = core.plan_clean("project", cwd=tmp_path, source_dir=root)
+    assert not clean_plan.has_blockers
+    assert len(clean_plan.orphans) == 3
 
 
 @pytest.mark.parametrize(
@@ -126,8 +128,9 @@ def test_cleanup_refuses_invalid_or_ambiguous_sources(tmp_path, broken):
     path = source(root, "---\nCLAUDE: {}\n---\nReview.")
     core.build("project", cwd=tmp_path, source_dir=root)
     path.write_text(broken, encoding="utf-8")
-    with pytest.raises(core.ParseError, match="cannot clean"):
-        core.find_orphans("project", cwd=tmp_path, source_dir=root)
+    clean_plan = core.plan_clean("project", cwd=tmp_path, source_dir=root)
+    assert clean_plan.has_blockers
+    assert not clean_plan.orphans
     assert (tmp_path / ".claude/agents/reviewer.md").is_file()
 
 

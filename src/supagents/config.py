@@ -9,8 +9,10 @@ source frontmatter convention.
 """
 
 import os
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from types import MappingProxyType
 from typing import Literal, Self
 
 from ruamel.yaml import YAML
@@ -85,7 +87,7 @@ class TargetConfig:
             raise ValueError("body_key must be a non-empty string")
 
     @classmethod
-    def from_mapping(cls, raw: dict[str, object]) -> Self:
+    def from_mapping(cls, raw: Mapping[str, object]) -> Self:
         """Build a validated ``TargetConfig`` from a raw YAML mapping."""
         unknown = set(raw) - _TARGET_FIELDS
         if unknown:
@@ -111,57 +113,59 @@ class TargetConfig:
         )
 
 
-DEFAULT_TARGETS: dict[str, TargetConfig] = {
-    "AGY": TargetConfig(
-        global_path=Path("~/.gemini/config/agents"),
-        project_path=Path(".agents/agents"),
-    ),
-    "CODEX": TargetConfig(
-        global_path=Path("~/.codex/agents"),
-        project_path=Path(".codex/agents"),
-        filename_suffix=".toml",
-        format="toml",
-    ),
-    "GROK": TargetConfig(
-        global_path=Path("~/.grok/agents"),
-        project_path=Path(".grok/agents"),
-    ),
-    "CLAUDE": TargetConfig(
-        global_path=Path("~/.claude/agents"),
-        project_path=Path(".claude/agents"),
-    ),
-    "GEMINI": TargetConfig(
-        global_path=Path("~/.gemini/agents"),
-        project_path=Path(".gemini/agents"),
-    ),
-    "COPILOT": TargetConfig(
-        global_path=Path("~/.copilot/agents"),
-        project_path=Path(".github/agents"),
-        filename_suffix=".agent.md",
-    ),
-    "CURSOR": TargetConfig(
-        global_path=Path("~/.cursor/agents"),
-        project_path=Path(".cursor/agents"),
-    ),
-    "OPENCODE": TargetConfig(
-        global_path=Path("~/.config/opencode/agents"),
-        project_path=Path(".opencode/agents"),
-    ),
-    "KILO": TargetConfig(
-        global_path=Path("~/.config/kilo/agents"),
-        project_path=Path(".kilo/agents"),
-    ),
-}
+DEFAULT_TARGETS: Mapping[str, TargetConfig] = MappingProxyType(
+    {
+        "AGY": TargetConfig(
+            global_path=Path("~/.gemini/config/agents"),
+            project_path=Path(".agents/agents"),
+        ),
+        "CODEX": TargetConfig(
+            global_path=Path("~/.codex/agents"),
+            project_path=Path(".codex/agents"),
+            filename_suffix=".toml",
+            format="toml",
+        ),
+        "GROK": TargetConfig(
+            global_path=Path("~/.grok/agents"),
+            project_path=Path(".grok/agents"),
+        ),
+        "CLAUDE": TargetConfig(
+            global_path=Path("~/.claude/agents"),
+            project_path=Path(".claude/agents"),
+        ),
+        "GEMINI": TargetConfig(
+            global_path=Path("~/.gemini/agents"),
+            project_path=Path(".gemini/agents"),
+        ),
+        "COPILOT": TargetConfig(
+            global_path=Path("~/.copilot/agents"),
+            project_path=Path(".github/agents"),
+            filename_suffix=".agent.md",
+        ),
+        "CURSOR": TargetConfig(
+            global_path=Path("~/.cursor/agents"),
+            project_path=Path(".cursor/agents"),
+        ),
+        "OPENCODE": TargetConfig(
+            global_path=Path("~/.config/opencode/agents"),
+            project_path=Path(".opencode/agents"),
+        ),
+        "KILO": TargetConfig(
+            global_path=Path("~/.config/kilo/agents"),
+            project_path=Path(".kilo/agents"),
+        ),
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
 class Config:
     """Top-level supagents configuration."""
 
-    targets: dict[str, TargetConfig]
+    targets: Mapping[str, TargetConfig]
 
     def __post_init__(self) -> None:
-        if not isinstance(self.targets, dict):
+        if not isinstance(self.targets, Mapping):
             raise TypeError("targets must be a mapping")
         normalized: dict[str, TargetConfig] = {}
         for k, val in self.targets.items():
@@ -173,7 +177,7 @@ class Config:
             if not isinstance(val, TargetConfig):
                 raise TypeError(f"target {key!r} must be a TargetConfig")
             normalized[key] = val
-        object.__setattr__(self, "targets", normalized)
+        object.__setattr__(self, "targets", MappingProxyType(normalized))
 
     @classmethod
     def load(cls, path: Path | None = None) -> Self:

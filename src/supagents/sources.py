@@ -2,6 +2,7 @@
 
 import re
 import stat
+from collections.abc import Set as AbstractSet
 from copy import deepcopy
 from dataclasses import dataclass, field
 from io import StringIO
@@ -185,7 +186,7 @@ def _parse_target_block(name: str, value: object, src: Source) -> TargetBlock | 
 
 
 def _parse_single(
-    path: Path, root: Path, known_targets: set[str], *, partial: bool = False
+    path: Path, root: Path, known_targets: AbstractSet[str], *, partial: bool = False
 ) -> tuple[Source, list[str]]:
     """Parse one concrete source or ``_*.md`` partial without resolving ``extends``."""
     pattern = PARTIAL_FILENAME_RE if partial else SOURCE_FILENAME_RE
@@ -298,11 +299,11 @@ def merge_sources(base: Source, child: Source, *, is_partial: bool) -> Source:
 def resolve_inheritance(
     path: Path,
     root: Path,
-    known_targets: set[str],
+    known_targets: AbstractSet[str],
     *,
     partial: bool,
     raw_cache: dict[Path, tuple[Source, list[str]]] | None = None,
-    failed_partials: set[Path] | None = None,
+    failed_partials: AbstractSet[Path] | None = None,
 ) -> Source:
     """Parse ``path`` and apply deduplicated post-order ``extends`` ancestors."""
     cache = raw_cache if raw_cache is not None else {}
@@ -359,9 +360,9 @@ def resolve_inheritance(
     return merged
 
 
-def parse_source(path: Path, root: Path, known_targets: set[str] | None = None) -> Source:
+def parse_source(path: Path, root: Path, known_targets: AbstractSet[str] | None = None) -> Source:
     """Read and parse a concrete source file into a ``Source`` value."""
-    targets = set(DEFAULT_TARGETS) if known_targets is None else known_targets
+    targets: AbstractSet[str] = DEFAULT_TARGETS.keys() if known_targets is None else known_targets
     return resolve_inheritance(path, root, targets, partial=False)
 
 

@@ -1,25 +1,19 @@
 """Stdlib argparse command-line interface for supagents."""
 
+from __future__ import annotations
+
 import argparse
-import json
 import os
 import sys
 from collections.abc import Sequence
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, TextIO
+from typing import TYPE_CHECKING, TextIO
 
-from ruamel.yaml.comments import CommentedMap
-
-from supagents import __version__, core
-from supagents.config import (
-    DEFAULT_TARGETS,
-    Config,
-    ConfigError,
-    Scope,
-    detect_scope,
-    source_root,
-)
+if TYPE_CHECKING:
+    from supagents.config import Config, Scope
+    from supagents.sources import Source
 
 _INIT_TARGET_DEFAULTS: dict[str, dict[str, object]] = {
     "CLAUDE": {"model": "inherit"},
@@ -64,10 +58,43 @@ Exit codes:
   130  Interrupted (SIGINT)
 """
 
-_PARSER_KWARGS: dict[str, Any] = {
-    "allow_abbrev": False,
-    **({"suggest_on_error": True} if sys.version_info >= (3, 14) else {}),
-}
+
+def _configure_parser(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    if sys.version_info >= (3, 14):
+        parser.suggest_on_error = True
+    return parser
+
+
+class _VersionAction(argparse.Action):
+    """Print package version lazily without importing importlib.metadata at startup."""
+
+    def __init__(
+        self,
+        option_strings: Sequence[str],
+        dest: str = argparse.SUPPRESS,
+        default: object = argparse.SUPPRESS,
+        help: str | None = None,  # noqa: A002 - argparse.Action parameter name
+    ) -> None:
+        super().__init__(
+            option_strings=option_strings,
+            dest=dest,
+            default=default,
+            nargs=0,
+            help=help,
+        )
+
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: object,
+        option_string: str | None = None,
+    ) -> None:
+        del namespace, values, option_string
+        from supagents import __version__
+
+        _out(f"supagents {__version__}")
+        parser.exit(0)
 
 
 class UsageError(Exception):
@@ -76,6 +103,19 @@ class UsageError(Exception):
 
 class OperationalError(Exception):
     """Raised on operational failures (exits 1)."""
+
+
+@dataclass(frozen=True, slots=True)
+class CommonOptions:
+    """Typed shared CLI options unpacked from ``argparse.Namespace``."""
+
+    global_scope: bool
+    project_scope: bool
+    targets: tuple[str, ...]
+    config: Path | None
+    source_dir: Path | None
+    quiet: bool
+    as_json: bool
 
 
 @dataclass(slots=True)
@@ -88,8 +128,22 @@ class RunContext:
     targets: set[str] | None
     source_dir: Path | None
     effective_source_dir: Path
+    cwd: Path
     quiet: bool
     as_json: bool
+
+
+def _common_options(args: argparse.Namespace) -> CommonOptions:
+    raw_targets: list[str] | None = args.target
+    return CommonOptions(
+        global_scope=bool(args.global_scope),
+        project_scope=bool(args.project_scope),
+        targets=tuple(raw_targets) if raw_targets else (),
+        config=args.config,
+        source_dir=args.source_dir,
+        quiet=bool(args.quiet),
+        as_json=bool(args.as_json),
+    )
 
 
 def _non_empty_path(raw: str) -> Path:
@@ -118,10 +172,13 @@ def _out(text: str = "", *, end: str = "\n") -> None:
 
 
 def _err(text: str = "", *, end: str = "\n") -> None:
-    sys.stderr.write(f"{text}{end}")
+    with suppress(BrokenPipeError):
+        sys.stderr.write(f"{text}{end}")
 
 
 def _emit_json(payload: dict[str, object]) -> None:
+    import json
+
     sys.stdout.write(f"{json.dumps(payload, indent=2)}\n")
 
 
@@ -131,32 +188,41 @@ def _silence_broken_pipe() -> None:
             os.dup2(devnull.fileno(), sys.stdout.fileno())
 
 
-def _prepare(args: argparse.Namespace) -> RunContext:
+def _prepare(opts: CommonOptions) -> RunContext:
     """Resolve scope, config, target filter, and source directory."""
-    global_flag: bool = args.global_scope
-    project_flag: bool = args.project_scope
-    if global_flag and project_flag:
+    if opts.global_scope and opts.project_scope:
         raise UsageError("--global and --project are mutually exclusive.")
-    scope: Scope = "global" if global_flag else "project" if project_flag else detect_scope()
-    explicit_scope = global_flag or project_flag
 
-    raw_source_dir: Path | None = args.source_dir
+    from supagents.config import Config, ConfigError, detect_scope, source_root
+
+    try:
+        cwd = Path.cwd()
+        scope: Scope = (
+            "global"
+            if opts.global_scope
+            else "project"
+            if opts.project_scope
+            else detect_scope(cwd)
+        )
+    except (OSError, RuntimeError) as e:
+        raise OperationalError(f"cannot determine working directory or scope: {e}") from e
+    explicit_scope = opts.global_scope or opts.project_scope
+
     resolved_source_dir: Path | None = None
-    if raw_source_dir is not None:
+    if opts.source_dir is not None:
         try:
-            resolved_source_dir = raw_source_dir.expanduser()
+            resolved_source_dir = opts.source_dir.expanduser()
         except RuntimeError as e:
             raise UsageError(f"source directory cannot be expanded: {e}") from e
 
     try:
-        config = Config.load(args.config)
+        config = Config.load(opts.config)
     except ConfigError as e:
         raise OperationalError(str(e)) from e
 
-    raw_targets: list[str] | None = args.target
     targets: set[str] | None = None
-    if raw_targets:
-        normalized = {t.upper() for t in raw_targets}
+    if opts.targets:
+        normalized = {t.upper() for t in opts.targets}
         unknown = normalized - set(config.targets)
         if unknown:
             raise UsageError(
@@ -165,7 +231,11 @@ def _prepare(args: argparse.Namespace) -> RunContext:
             )
         targets = normalized
 
-    effective_source_dir = (resolved_source_dir or source_root(scope)).absolute()
+    try:
+        effective_source_dir = (resolved_source_dir or source_root(scope, cwd)).absolute()
+    except (OSError, RuntimeError) as e:
+        raise OperationalError(f"cannot resolve source directory: {e}") from e
+
     ctx = RunContext(
         config=config,
         scope=scope,
@@ -173,8 +243,9 @@ def _prepare(args: argparse.Namespace) -> RunContext:
         targets=targets,
         source_dir=resolved_source_dir,
         effective_source_dir=effective_source_dir,
-        quiet=bool(args.quiet),
-        as_json=bool(args.as_json),
+        cwd=cwd,
+        quiet=opts.quiet,
+        as_json=opts.as_json,
     )
     if not ctx.quiet and not ctx.as_json:
         origin = "explicit" if explicit_scope else "auto-detected"
@@ -182,7 +253,7 @@ def _prepare(args: argparse.Namespace) -> RunContext:
     return ctx
 
 
-def _print_source_issues(sources: list[core.Source]) -> None:
+def _print_source_issues(sources: Sequence[Source]) -> None:
     """Print per-source warnings and errors to stderr verbatim."""
     for src in sources:
         for message in src.warnings:
@@ -200,13 +271,22 @@ def _run_build_or_check(
     strict: bool,
     verbose: bool,
 ) -> int:
+    from supagents import core
+
     no_write = dry_run or check or diff
     if check:
-        summary = core.check(ctx.scope, ctx.config, targets=ctx.targets, source_dir=ctx.source_dir)
+        summary = core.check(
+            ctx.scope,
+            ctx.config,
+            cwd=ctx.cwd,
+            targets=ctx.targets,
+            source_dir=ctx.source_dir,
+        )
     else:
         summary = core.build(
             scope=ctx.scope,
             config=ctx.config,
+            cwd=ctx.cwd,
             dry_run=no_write,
             targets=ctx.targets,
             source_dir=ctx.source_dir,
@@ -235,9 +315,9 @@ def _run_build_or_check(
                 summary.fatal_errors.append((path, str(e)))
                 _err(f"{_style('ERROR', 'red', sys.stderr)} Could not preview {path}: {e}")
 
-    orphan_scan_skipped = bool(summary.warning_count and check)
+    orphan_scan_skipped = summary.orphan_scan_skipped
     if orphan_scan_skipped:
-        _err("Orphan scan skipped: resolve source warnings to determine ownership.")
+        _err("Orphan scan skipped: resolve source errors or warnings to determine ownership.")
 
     failed = bool(
         summary.fatal_errors
@@ -316,33 +396,47 @@ def _run_build_or_check(
     return 1 if failed else 0
 
 
-def _handle_build(args: argparse.Namespace) -> int:
-    if args.dry_run and args.check:
+def _handle_build(
+    opts: CommonOptions,
+    *,
+    dry_run: bool,
+    check: bool,
+    diff: bool,
+    strict: bool,
+    verbose: bool,
+) -> int:
+    if dry_run and check:
         raise UsageError("--dry-run and --check are mutually exclusive.")
-    ctx = _prepare(args)
+    ctx = _prepare(opts)
     return _run_build_or_check(
         ctx,
-        dry_run=args.dry_run,
-        check=args.check,
-        diff=args.diff,
-        strict=args.strict,
-        verbose=args.verbose,
+        dry_run=dry_run,
+        check=check,
+        diff=diff,
+        strict=strict,
+        verbose=verbose,
     )
 
 
-def _handle_check(args: argparse.Namespace) -> int:
-    ctx = _prepare(args)
+def _handle_check(
+    opts: CommonOptions,
+    *,
+    diff: bool,
+    strict: bool,
+    verbose: bool,
+) -> int:
+    ctx = _prepare(opts)
     return _run_build_or_check(
         ctx,
         dry_run=False,
         check=True,
-        diff=args.diff,
-        strict=args.strict,
-        verbose=args.verbose,
+        diff=diff,
+        strict=strict,
+        verbose=verbose,
     )
 
 
-def _confirm_auto_global_clean(orphans: list[Path], *, no_input: bool) -> bool:
+def _confirm_auto_global_clean(orphans: Sequence[Path], *, no_input: bool) -> bool:
     """Confirm destructive cleanup when global scope was inferred rather than requested."""
     count = len(orphans)
     if no_input or not getattr(sys.stdin, "isatty", lambda: False)():
@@ -355,7 +449,8 @@ def _confirm_auto_global_clean(orphans: list[Path], *, no_input: bool) -> bool:
     for path in orphans:
         _err(f"  {path}")
     _err(f"Remove {count} global orphan(s) under auto-detected global scope? [y/N]: ", end="")
-    sys.stderr.flush()
+    with suppress(BrokenPipeError):
+        sys.stderr.flush()
     answer = sys.stdin.readline().strip().lower()
     if answer not in {"y", "yes"}:
         _err("Aborted.")
@@ -363,9 +458,23 @@ def _confirm_auto_global_clean(orphans: list[Path], *, no_input: bool) -> bool:
     return True
 
 
-def _handle_clean(args: argparse.Namespace) -> int:
-    ctx = _prepare(args)
-    plan = core.plan_clean(ctx.scope, ctx.config, targets=ctx.targets, source_dir=ctx.source_dir)
+def _handle_clean(
+    opts: CommonOptions,
+    *,
+    dry_run: bool,
+    yes: bool,
+    no_input: bool,
+) -> int:
+    from supagents import core
+
+    ctx = _prepare(opts)
+    plan = core.plan_clean(
+        ctx.scope,
+        ctx.config,
+        cwd=ctx.cwd,
+        targets=ctx.targets,
+        source_dir=ctx.source_dir,
+    )
     if plan.has_blockers:
         _print_source_issues(plan.sources)
         for path, msg in plan.fatal_errors:
@@ -376,7 +485,27 @@ def _handle_clean(args: argparse.Namespace) -> int:
         )
         return 1
 
-    if not plan.orphans:
+    if (
+        plan.orphans
+        and not dry_run
+        and ctx.scope == "global"
+        and not ctx.explicit_scope
+        and not yes
+        and not _confirm_auto_global_clean(plan.orphans, no_input=no_input)
+    ):
+        return 1
+
+    processed: list[str] = []
+    for path in plan.orphans:
+        if not dry_run:
+            try:
+                path.unlink()
+            except OSError as e:
+                _err(f"{_style('ERROR', 'red', sys.stderr)} {path}: {e}")
+                return 1
+        processed.append(str(path))
+
+    try:
         if ctx.as_json:
             _emit_json(
                 {
@@ -384,61 +513,40 @@ def _handle_clean(args: argparse.Namespace) -> int:
                     "command": "clean",
                     "scope": ctx.scope,
                     "source_dir": str(ctx.effective_source_dir),
-                    "dry_run": args.dry_run,
-                    "removed": [],
+                    "dry_run": dry_run,
+                    "removed": processed,
                 }
             )
         elif not ctx.quiet:
-            _out(_style("Nothing to clean.", "dim", sys.stdout))
-        return 0
-
-    if (
-        not args.dry_run
-        and ctx.scope == "global"
-        and not ctx.explicit_scope
-        and not args.yes
-        and not _confirm_auto_global_clean(plan.orphans, no_input=args.no_input)
-    ):
-        return 1
-
-    processed: list[str] = []
-    for path in plan.orphans:
-        if args.dry_run:
-            processed.append(str(path))
-            if not ctx.quiet and not ctx.as_json:
-                _out(f"{_style('would remove', 'cyan', sys.stdout)} {path}")
-            continue
-        try:
-            path.unlink()
-        except OSError as e:
-            _err(f"{_style('ERROR', 'red', sys.stderr)} {path}: {e}")
-            return 1
-        processed.append(str(path))
-        if not ctx.quiet and not ctx.as_json:
-            _out(f"{_style('removed', 'red', sys.stdout)} {path}")
-
-    if ctx.as_json:
-        _emit_json(
-            {
-                "ok": True,
-                "command": "clean",
-                "scope": ctx.scope,
-                "source_dir": str(ctx.effective_source_dir),
-                "dry_run": args.dry_run,
-                "removed": processed,
-            }
-        )
+            if not processed:
+                _out(_style("Nothing to clean.", "dim", sys.stdout))
+            else:
+                verb, color = ("would remove", "cyan") if dry_run else ("removed", "red")
+                for item in processed:
+                    _out(f"{_style(verb, color, sys.stdout)} {item}")
+    except BrokenPipeError:
+        _silence_broken_pipe()
     return 0
 
 
-def _handle_init(args: argparse.Namespace) -> int:
-    name: str = args.name
+def _handle_init(
+    opts: CommonOptions,
+    *,
+    name: str,
+    force: bool,
+    dry_run: bool,
+) -> int:
+    from ruamel.yaml.comments import CommentedMap
+
+    from supagents import core, sources
+    from supagents.config import DEFAULT_TARGETS, source_root
+
     stem = name.removesuffix(".md")
-    if not core.SOURCE_FILENAME_RE.match(f"{stem}.md"):
+    if not sources.SOURCE_FILENAME_RE.match(f"{stem}.md"):
         raise UsageError(
             f"name {name!r} must match ^[a-z0-9][a-z0-9_-]*$ (lowercase letters, digits, '-_')."
         )
-    ctx = _prepare(args)
+    ctx = _prepare(opts)
     selected = sorted(ctx.targets) if ctx.targets is not None else list(DEFAULT_TARGETS)
     frontmatter = CommentedMap(
         name=stem,
@@ -446,7 +554,10 @@ def _handle_init(args: argparse.Namespace) -> int:
     )
     for key in selected:
         frontmatter[key] = _INIT_TARGET_DEFAULTS.get(key, {})
-    root = ctx.source_dir or source_root(ctx.scope)
+    try:
+        root = ctx.source_dir or source_root(ctx.scope, ctx.cwd)
+    except (OSError, RuntimeError) as e:
+        raise OperationalError(f"cannot resolve source directory: {e}") from e
     target_path = root / f"{stem}.md"
     try:
         is_symlink = target_path.is_symlink()
@@ -463,56 +574,64 @@ def _handle_init(args: argparse.Namespace) -> int:
             f"{_style('ERROR', 'red', sys.stderr)}: {target_path} exists and is not a regular file."
         )
         return 1
-    if exists and not args.force:
+    if exists and not force:
         _err(
             f"{_style('ERROR', 'red', sys.stderr)}: {target_path} already exists. "
             "Use --force to overwrite."
         )
         return 1
     title = stem.replace("-", " ").replace("_", " ").title()
-    content = _INIT_TEMPLATE.format(name=stem, title=title, frontmatter=core.dump_yaml(frontmatter))
-    if not args.dry_run:
+    content = _INIT_TEMPLATE.format(
+        name=stem, title=title, frontmatter=sources.dump_yaml(frontmatter)
+    )
+    if not dry_run:
         try:
             core.atomic_write(target_path, content)
         except OSError as e:
             _err(f"{_style('ERROR', 'red', sys.stderr)}: could not initialize {target_path}: {e}")
             return 1
 
-    if ctx.as_json:
-        _emit_json(
-            {
-                "ok": True,
-                "command": "init",
-                "scope": ctx.scope,
-                "source_dir": str(ctx.effective_source_dir),
-                "dry_run": args.dry_run,
-                "path": str(target_path),
-                "targets": selected,
-            }
-        )
-    elif not ctx.quiet:
-        verb, color = ("would create", "cyan") if args.dry_run else ("created", "green")
-        _out(f"{_style(verb, color, sys.stdout)} {target_path}")
+    try:
+        if ctx.as_json:
+            _emit_json(
+                {
+                    "ok": True,
+                    "command": "init",
+                    "scope": ctx.scope,
+                    "source_dir": str(ctx.effective_source_dir),
+                    "dry_run": dry_run,
+                    "path": str(target_path),
+                    "targets": selected,
+                }
+            )
+        elif not ctx.quiet:
+            verb, color = ("would create", "cyan") if dry_run else ("created", "green")
+            _out(f"{_style(verb, color, sys.stdout)} {target_path}")
+    except BrokenPipeError:
+        _silence_broken_pipe()
     return 0
 
 
-def _handle_list(args: argparse.Namespace) -> int:
-    ctx = _prepare(args)
-    cwd = Path.cwd()
-    sources, _, fatal_errors = core.collect_sources(ctx.scope, ctx.config, cwd, ctx.source_dir)
+def _handle_list(opts: CommonOptions) -> int:
+    from supagents import core, sources
+
+    ctx = _prepare(opts)
+    collected, _, fatal_errors = sources.collect_sources(
+        ctx.scope, ctx.config, ctx.cwd, ctx.source_dir
+    )
     for path, msg in fatal_errors:
         _err(f"{_style('ERROR', 'red', sys.stderr)} {path}: {msg}")
     if fatal_errors:
         return 1
 
     rows: list[tuple[str, str, str]] = []
-    for src in sources:
+    for src in collected:
         rows.extend(
             (src.name, plan.target_name, str(plan.output_path))
-            for plan in core.plan_source(src, ctx.config, ctx.scope, cwd, ctx.targets)
+            for plan in core.plan_source(src, ctx.config, ctx.scope, ctx.cwd, ctx.targets)
         )
-    _print_source_issues(sources)
-    has_errors = any(src.errors for src in sources)
+    _print_source_issues(collected)
+    has_errors = any(src.errors for src in collected)
 
     try:
         if ctx.as_json:
@@ -600,28 +719,32 @@ def _add_shared_options(parser: argparse.ArgumentParser) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     """Define the full CLI parser tree."""
-    parser = argparse.ArgumentParser(
-        prog="supagents",
-        description=(
-            "Maintain shared subagent instructions and generate native coding-tool configurations."
-        ),
-        epilog=_ROOT_EPILOG,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        **_PARSER_KWARGS,
+    parser = _configure_parser(
+        argparse.ArgumentParser(
+            prog="supagents",
+            description=(
+                "Maintain shared subagent instructions and generate native coding-tool "
+                "configurations."
+            ),
+            epilog=_ROOT_EPILOG,
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+            allow_abbrev=False,
+        )
     )
     parser.add_argument(
         "--version",
-        action="version",
-        version=f"supagents {__version__}",
+        action=_VersionAction,
         help="Show version and exit.",
     )
     subparsers = parser.add_subparsers(title="commands", metavar="COMMAND", required=True)
 
-    p_build = subparsers.add_parser(
-        "build",
-        help="Compile sources to target outputs.",
-        description="Compile sources to target outputs.",
-        **_PARSER_KWARGS,
+    p_build = _configure_parser(
+        subparsers.add_parser(
+            "build",
+            help="Compile sources to target outputs.",
+            description="Compile sources to target outputs.",
+            allow_abbrev=False,
+        )
     )
     _add_shared_options(p_build)
     p_build.add_argument(
@@ -651,13 +774,25 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Also print source-to-output mappings and unchanged files.",
     )
-    p_build.set_defaults(handler=_handle_build, parser=p_build)
+    p_build.set_defaults(
+        handler=lambda args: _handle_build(
+            _common_options(args),
+            dry_run=bool(args.dry_run),
+            check=bool(args.check),
+            diff=bool(args.diff),
+            strict=bool(args.strict),
+            verbose=bool(args.verbose),
+        ),
+        parser=p_build,
+    )
 
-    p_check = subparsers.add_parser(
-        "check",
-        help="Check missing, modified, and obsolete outputs without writing.",
-        description="Check missing, modified, and obsolete outputs without writing.",
-        **_PARSER_KWARGS,
+    p_check = _configure_parser(
+        subparsers.add_parser(
+            "check",
+            help="Check missing, modified, and obsolete outputs without writing.",
+            description="Check missing, modified, and obsolete outputs without writing.",
+            allow_abbrev=False,
+        )
     )
     _add_shared_options(p_check)
     p_check.add_argument(
@@ -676,13 +811,23 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Also print unchanged files.",
     )
-    p_check.set_defaults(handler=_handle_check, parser=p_check)
+    p_check.set_defaults(
+        handler=lambda args: _handle_check(
+            _common_options(args),
+            diff=bool(args.diff),
+            strict=bool(args.strict),
+            verbose=bool(args.verbose),
+        ),
+        parser=p_check,
+    )
 
-    p_clean = subparsers.add_parser(
-        "clean",
-        help="Remove orphaned outputs (marker-bearing files no longer produced).",
-        description="Remove orphaned outputs (marker-bearing files no longer produced).",
-        **_PARSER_KWARGS,
+    p_clean = _configure_parser(
+        subparsers.add_parser(
+            "clean",
+            help="Remove orphaned outputs (marker-bearing files no longer produced).",
+            description="Remove orphaned outputs (marker-bearing files no longer produced).",
+            allow_abbrev=False,
+        )
     )
     _add_shared_options(p_clean)
     p_clean.add_argument(
@@ -702,13 +847,23 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Never prompt for confirmation on stdin.",
     )
-    p_clean.set_defaults(handler=_handle_clean, parser=p_clean)
+    p_clean.set_defaults(
+        handler=lambda args: _handle_clean(
+            _common_options(args),
+            dry_run=bool(args.dry_run),
+            yes=bool(args.yes),
+            no_input=bool(args.no_input),
+        ),
+        parser=p_clean,
+    )
 
-    p_init = subparsers.add_parser(
-        "init",
-        help="Scaffold a new source file with target boilerplate.",
-        description="Scaffold a new source file with target boilerplate.",
-        **_PARSER_KWARGS,
+    p_init = _configure_parser(
+        subparsers.add_parser(
+            "init",
+            help="Scaffold a new source file with target boilerplate.",
+            description="Scaffold a new source file with target boilerplate.",
+            allow_abbrev=False,
+        )
     )
     p_init.add_argument(
         "name",
@@ -728,16 +883,29 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Preview actions without writing or removing files.",
     )
-    p_init.set_defaults(handler=_handle_init, parser=p_init)
+    p_init.set_defaults(
+        handler=lambda args: _handle_init(
+            _common_options(args),
+            name=str(args.name),
+            force=bool(args.force),
+            dry_run=bool(args.dry_run),
+        ),
+        parser=p_init,
+    )
 
-    p_list = subparsers.add_parser(
-        "list",
-        help="List defined sources and the outputs each would produce.",
-        description="List defined sources and the outputs each would produce.",
-        **_PARSER_KWARGS,
+    p_list = _configure_parser(
+        subparsers.add_parser(
+            "list",
+            help="List defined sources and the outputs each would produce.",
+            description="List defined sources and the outputs each would produce.",
+            allow_abbrev=False,
+        )
     )
     _add_shared_options(p_list)
-    p_list.set_defaults(handler=_handle_list, parser=p_list)
+    p_list.set_defaults(
+        handler=lambda args: _handle_list(_common_options(args)),
+        parser=p_list,
+    )
 
     return parser
 

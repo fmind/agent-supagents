@@ -119,7 +119,11 @@ supagents check --project --strict --json
 
 - **Scaffolding (`init`)**: `--target` is repeatable, case-insensitive, accepts custom targets from `--config`, and rejects unknown targets. Without `--target`, all nine bundled targets are included. `-n`/`--dry-run` previews creation without writing. Start from the [reviewer example](../examples/reviewer.md) for practical defaults.
 - **Previews (`--diff`, `-n`/`--dry-run`)**: `build --diff` previews additions and edits as unified diffs without writing; `check --diff` also previews obsolete files as removals. Output is plain text with zero emoji or markup rewriting.
-- **Machine output (`--json`, `-q`/`--quiet`)**: all five commands accept `--json` (one schema-stable JSON object on `stdout`, empty `stdout` + `stderr` diagnostics on fatal failure) and `-q`/`--quiet` to suppress routine status lines. Color follows TTY, `NO_COLOR`, and `TERM=dumb`.
+- **Machine output (`--json`, `-q`/`--quiet`)**: all five commands accept `--json` (one JSON object on `stdout`, empty `stdout` + `stderr` diagnostics on fatal failure) and `-q`/`--quiet` to suppress routine status lines. Color follows TTY, `NO_COLOR`, and `TERM=dumb`. Every `--json` payload includes `ok`, `command`, `scope`, and `source_dir`:
+  - `build` / `check`: adds `dry_run`, `orphan_scan_skipped`, `written`, `unchanged`, `obsolete`, `warnings` (`[{source, message}]`), `errors` (`[{source, message}]`), `mappings` (`[{source, target, output}]`), and `diffs` (`{path: diff}`) when `--diff` is passed.
+  - `clean`: adds `dry_run` and `removed`.
+  - `init`: adds `dry_run`, `path`, and `targets`.
+  - `list`: adds `items` (`[{source, target, output}]`; source errors exit `1` with empty `stdout` and `stderr` diagnostics).
 - **Checks (`check`, `build --check`)**: fail on missing, modified, or obsolete outputs; `--strict` also fails on warnings. Non-strict checks skip orphan scanning when warnings exist. Checks require an existing source directory (empty is valid).
 - **Orphan scope**: orphan scans inspect marker-bearing regular files directly in selected targets' configured output directories, preserving handwritten files and symlinks. Unreadable directories fail closed.
 

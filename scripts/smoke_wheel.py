@@ -15,6 +15,7 @@ def _run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
         cwd=cwd,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=True,
         timeout=60,
         stdin=subprocess.DEVNULL,

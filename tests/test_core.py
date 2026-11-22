@@ -11,7 +11,7 @@ from ruamel.yaml.comments import CommentedMap
 
 from supagents import core, sources
 from supagents.config import DEFAULT_TARGETS, Config
-from supagents.core import ParseError, parse_source, split_frontmatter
+from supagents.sources import ParseError, parse_source, split_frontmatter
 from tests.conftest import MakeSource
 
 _yaml = YAML(typ="rt")
@@ -246,7 +246,7 @@ def test_parse_yaml_directive_does_not_leak_into_render(tmp_path: Path) -> None:
         parse_source(broken, tmp_path)
     rendered = core.render(Path("agent.md"), CommentedMap(name="clean"), "body")
     assert "%YAML" not in rendered
-    assert not core.dump_yaml(CommentedMap(name="clean")).startswith("%YAML")
+    assert not sources.dump_yaml(CommentedMap(name="clean")).startswith("%YAML")
 
 
 @pytest.mark.parametrize(
@@ -274,7 +274,7 @@ def test_compute_frontmatter(
     expected_keys: list[str],
     expected_overrides: dict[str, object],
 ) -> None:
-    out = core.compute_frontmatter(shared, target)
+    out = sources.compute_frontmatter(shared, target)
     assert list(out.keys()) == expected_keys
     for k, v in expected_overrides.items():
         assert out[k] == v
@@ -290,7 +290,7 @@ def test_compute_frontmatter(
     ],
 )
 def test_compute_body(body: str, append: str | None, expected: str) -> None:
-    assert core.compute_body(body, append) == expected
+    assert sources.compute_body(body, append) == expected
 
 
 # ---------- atomic_write ----------
@@ -320,6 +320,14 @@ def test_atomic_write_cleans_up_temp_on_keyboard_interrupt(
     with pytest.raises(KeyboardInterrupt):
         core.atomic_write(target, "hello\n")
     assert list(tmp_path.iterdir()) == []
+
+
+def test_atomic_write_applies_current_umask_without_mutating_it(tmp_path: Path) -> None:
+    expected_umask = core._current_umask()
+    target = tmp_path / "agent.md"
+    core.atomic_write(target, "hello\n")
+    assert (target.stat().st_mode & 0o777) == (0o666 & ~expected_umask)
+    assert core._current_umask() == expected_umask
 
 
 # ---------- build, check & orphans ----------
@@ -514,45 +522,50 @@ def test_find_orphans_deduplicates_symlinked_target_directories(
     assert core.build("project", config=cfg, cwd=tmp_path).written
     src.unlink()
 
-    orphans = core.find_orphans("project", config=cfg, cwd=tmp_path)
+    plan = core.plan_clean("project", config=cfg, cwd=tmp_path)
+    assert not plan.has_blockers
+    orphans = plan.orphans
     assert len(orphans) == 1
     orphans[0].unlink()
     assert not (real_dir / "agent.md").exists()
 
 
-def test_find_orphans_target_filter(ci_workspace: Path) -> None:
+def test_plan_clean_target_filter(ci_workspace: Path) -> None:
     core.build(scope="project", cwd=ci_workspace)
     (ci_workspace / ".agents" / "supagents" / "code_investigator.md").unlink()
-    orphans = core.find_orphans(scope="project", cwd=ci_workspace, targets={"CLAUDE"})
-    assert {p.name for p in orphans} == {"code_investigator.md"}
+    plan = core.plan_clean(scope="project", cwd=ci_workspace, targets={"CLAUDE"})
+    assert not plan.has_blockers
+    assert {p.name for p in plan.orphans} == {"code_investigator.md"}
     assert (ci_workspace / ".github" / "agents" / "code_investigator.agent.md").exists()
 
 
 def test_collect_sources_returns_sources_partials_and_errors(ci_workspace: Path) -> None:
-    collected, partials, fatal = core.collect_sources("project", Config.load(), ci_workspace)
+    collected, partials, fatal = sources.collect_sources("project", Config.load(), ci_workspace)
     assert [s.name for s in collected] == ["code_investigator"]
     assert partials == []
     assert fatal == []
 
 
-def test_find_orphans_after_source_deletion_preserves_handwritten(ci_workspace: Path) -> None:
+def test_plan_clean_after_source_deletion_preserves_handwritten(ci_workspace: Path) -> None:
     core.build(scope="project", cwd=ci_workspace)
     handwritten = ci_workspace / ".claude" / "agents" / "manual.md"
     handwritten.write_text("---\nname: manual\n---\nhand-written\n", encoding="utf-8")
     (ci_workspace / ".agents" / "supagents" / "code_investigator.md").unlink()
-    orphans = core.find_orphans(scope="project", cwd=ci_workspace)
-    assert {p.name for p in orphans} == {"code_investigator.md", "code_investigator.agent.md"}
-    assert handwritten not in orphans
+    plan = core.plan_clean(scope="project", cwd=ci_workspace)
+    assert not plan.has_blockers
+    assert {p.name for p in plan.orphans} == {"code_investigator.md", "code_investigator.agent.md"}
+    assert handwritten not in plan.orphans
     assert handwritten.exists()
 
 
-def test_find_orphans_skips_non_files(ci_workspace: Path) -> None:
+def test_plan_clean_skips_non_files(ci_workspace: Path) -> None:
     core.build(scope="project", cwd=ci_workspace)
     (ci_workspace / ".claude" / "agents" / "stub.md").mkdir()
     (ci_workspace / ".agents" / "supagents" / "code_investigator.md").unlink()
-    orphans = core.find_orphans(scope="project", cwd=ci_workspace)
-    assert all(o.is_file() for o in orphans)
-    assert not any(o.name == "stub.md" for o in orphans)
+    plan = core.plan_clean(scope="project", cwd=ci_workspace)
+    assert not plan.has_blockers
+    assert all(o.is_file() for o in plan.orphans)
+    assert not any(o.name == "stub.md" for o in plan.orphans)
 
 
 def test_render_ends_with_single_newline(ci_workspace: Path, ci_outputs: list[Path]) -> None:

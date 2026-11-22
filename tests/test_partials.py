@@ -6,9 +6,9 @@ from pathlib import Path
 import pytest
 from ruamel.yaml.comments import CommentedMap
 
-from supagents import core
+from supagents import core, sources
 from supagents.config import DEFAULT_TARGETS, Config
-from supagents.core import ParseError, parse_source
+from supagents.sources import ParseError, parse_source
 from tests.conftest import MakeSource
 
 
@@ -48,7 +48,7 @@ def test_partial_inheritance_single_and_body_slot(
     )
 
     assert [
-        p.name for p in core.iter_markdown_files(tmp_path / ".agents/supagents", partial=False)
+        p.name for p in sources.iter_markdown_files(tmp_path / ".agents/supagents", partial=False)
     ] == ["security.md"]
     summary = core.build("project", cwd=tmp_path, strict=True)
     assert not summary.fatal_errors
@@ -349,9 +349,9 @@ def test_output_cannot_overwrite_partial_and_clean_preserves_partial(
         }
     )
     assert core.build("project", config=cfg, cwd=tmp_path, source_dir=root, strict=True).written
-    assert kept_partial not in core.find_orphans(
-        "project", config=cfg, cwd=tmp_path, source_dir=root
-    )
+    clean_plan = core.plan_clean("project", config=cfg, cwd=tmp_path, source_dir=root)
+    assert not clean_plan.has_blockers
+    assert kept_partial not in clean_plan.orphans
     assert not core.check("project", config=cfg, cwd=tmp_path, source_dir=root).orphans
     assert partial.exists()
 
@@ -406,7 +406,7 @@ def test_cyclic_and_deep_commented_map_raise_parse_error() -> None:
         cur["n"] = nxt
         cur = nxt
     with pytest.raises(ParseError, match="cannot be represented as YAML"):
-        core.dump_yaml(deep)
+        sources.dump_yaml(deep)
 
     cyclic = CommentedMap(name="x")
     cyclic["self"] = cyclic
