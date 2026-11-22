@@ -30,9 +30,9 @@ jobs:
         with:
           persist-credentials: false
       - name: Set up mise tools
-        uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
+        # jactionlint ignore=self-repository
+        uses: ./.github/actions/setup-mise
         with:
-          version: 2026.11.12
           cache: ${{ !startsWith(github.ref, 'refs/tags/') }}
       - name: Run canonical gate
         run: mise run all

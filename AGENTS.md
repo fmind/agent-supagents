@@ -3,7 +3,7 @@
 ## Overview
 
 - `agent-supagents` is a Python CLI (`supagents`) that compiles one Markdown source into native subagent files for Antigravity, Claude Code, Codex, Gemini CLI, GitHub Copilot, Grok, Cursor, OpenCode, and Kilo Code. See [README.md](README.md) for quickstart and user usage.
-- Ships harness manifests (`.claude-plugin/`, `gemini-extension.json`, `plugin.json`), the distributable `/supagent` skill (`skills/supagent/SKILL.md`), and maintainer skills in `.agents/skills/` (`.claude/skills` symlinks `../.agents/skills`).
+- Ships harness manifests (`.claude-plugin/`, `gemini-extension.json`, `plugin.json`), the distributable `/supagent` skill (`skills/supagent/SKILL.md`), and maintainer skills in `.agents/skills/`.
 - Python ≥ 3.12. Minimal runtime dependencies: `ruamel.yaml` and `tomli-w` (stdlib `argparse` CLI and frozen `dataclasses` config). No I/O outside documented source/output paths.
 
 ## Conventions
@@ -24,8 +24,9 @@
 - `src/supagents/` — package (`cli.py`, `config.py`, `core.py`, `sources.py`, `__main__.py`).
 - `tests/` — `pytest` suite (`conftest.py`, `fixtures/`, `test_{cli,config,core,hosts,metadata,native_targets,partials,verification}.py`).
 - `skills/supagent/SKILL.md` — distributable user skill (`/supagent`).
-- `.agents/skills/{harnesses,release}/SKILL.md` — repo maintenance skills (linked at `.claude/skills`).
+- `.agents/skills/{harnesses,release}/SKILL.md` — repo maintenance skills.
 - `zensical.toml` & `docs/index.md` — single-page `README.md` site deployed to GitHub Pages.
-- `.github/workflows/{ci,cd,docs,security}.yml` — CI, tag-driven PyPI/GitHub Release CD, Pages deploy, and weekly security/online-actions scan.
+- `.github/actions/setup-mise/action.yml` & `.github/workflows/{ci,cd,docs,security}.yml` — shared `mise` setup action, CI, tag-driven PyPI/GitHub Release CD, Pages deploy, and weekly security/online-actions scan.
+- `SECURITY.md` — vulnerability disclosure policy and scope.
 - `scripts/` — `check_hosts.py` (offline host discovery probes), `smoke_wheel.py` (hash-locked isolated wheel smoke test), and `verify_release.py` (manifest/tag/changelog verifier).
 - `docs/{usage,compatibility}.md` & `examples/reviewer.md` — reference contracts, compatibility matrix, and portable example.

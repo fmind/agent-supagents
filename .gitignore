@@ -1,23 +1,21 @@
+# Docs: https://git-scm.com/docs/gitignore
 *.py[co]
 .cache/
 .coverage*
+.env
 .pytest_cache/
 .ruff_cache/
 .ty_cache/
 .venv/
 __pycache__/
-build/
 dist/
 htmlcov/
 site/
 
 # Local agent compile outputs and scratch prompts
-!.agents/
 .agents/*
 !.agents/skills/
-!.claude/
-.claude/*
-!.claude/skills
+.claude/
 .codex/
 .cursor/
 .gemini/

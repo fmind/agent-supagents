@@ -9,18 +9,29 @@
     "**/.venv",
     "**/.pytest_cache",
     "**/.ruff_cache",
+    "**/.ty_cache",
     "**/dist",
     "**/htmlcov",
     "**/site",
+    ".agents/agents/**",
+    ".agents/supagents/**",
+    ".claude/**",
+    ".codex/**",
+    ".cursor/**",
+    ".gemini/**",
+    ".github/agents/**",
+    ".grok/**",
+    ".kilo/**",
+    ".opencode/**",
     "tests/fixtures/**"
   ],
   "markdown": {
     "textWrap": "never"
   },
   "plugins": [
-    "npm:dprint-plugin-yaml@0.6.0",
-    "npm:@dprint/json@0.26.0",
-    "npm:@dprint/markdown@0.29.0",
-    "npm:@dprint/toml@0.10.0"
+    "npm:dprint-plugin-yaml@0.6.0@aee3873f443c9f749521ea171cd38ed381491123aa4530684dd0d6e3deb6727b",
+    "npm:@dprint/json@0.26.0@c33cd9b19d84c713e1863664fc2111cca30a22ecb69df6a5ee364539b39d6ef2",
+    "npm:@dprint/markdown@0.29.0@d67ef8fb344b3e50ccc12c246f577303cad49eb0f7a7210731d59684504d72db",
+    "npm:@dprint/toml@0.10.0@b263aee1b268a05bfa84a0ddad2a4a7df403431fbe2df61a42deef1305645f1a"
   ]
 }

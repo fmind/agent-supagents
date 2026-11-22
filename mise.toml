@@ -3,6 +3,7 @@
 min_version = "2026.11.12"
 
 [settings]
+locked = true
 lockfile = true
 lockfile_platforms = ["linux-arm64", "linux-x64", "macos-arm64"]
 minimum_release_age = "0d"
@@ -70,6 +71,7 @@ depends = [
   "check:leaks",
   "check:lint",
   "check:release",
+  "check:tasks",
   "check:types",
 ]
 
@@ -119,6 +121,10 @@ run = "uv run --locked ruff check ."
 description = "Verify package and plugin manifest consistency"
 run = "uv run --locked python scripts/verify_release.py"
 
+[tasks."check:tasks"]
+description = "Validate the mise task graph and Lefthook configuration"
+run = ["mise tasks validate", "lefthook validate"]
+
 [tasks."check:types"]
 alias = "ct"
 description = "Type-check Python sources (ty)"
@@ -136,6 +142,7 @@ run = "uv run --locked python scripts/check_hosts.py"
 [tasks.test]
 alias = "t"
 description = "Run offline tests with the coverage gate"
+env.TZ = "UTC"
 run = "uv run --locked pytest -q --cov --cov-report="
 
 [tasks.coverage]
@@ -155,6 +162,8 @@ depends = ["build:docs", "build:package"]
 
 [tasks."build:docs"]
 description = "Build the single-page README documentation site (Zensical)"
+sources = ["zensical.toml", "README.md", "docs/**/*", "pyproject.toml", "uv.lock"]
+outputs = ["site/index.html"]
 run = "uv run --locked zensical build --clean --strict"
 
 [tasks."serve:docs"]
@@ -163,6 +172,8 @@ run = "uv run --locked zensical serve -a 127.0.0.1:${PORT:-8000}"
 
 [tasks."build:package"]
 description = "Build distributions and smoke-test the wheel with hash-locked runtime dependencies"
+sources = ["pyproject.toml", "uv.lock", "README.md", "LICENSE", "src/**/*", "scripts/smoke_wheel.py"]
+outputs = ["dist/supagents-*.whl", "dist/supagents-*.tar.gz"]
 run = [
   "uv build --out-dir dist --clear --no-sources",
   "uv run --locked python scripts/smoke_wheel.py",
@@ -171,7 +182,7 @@ run = [
 [tasks.clean]
 alias = "n"
 description = "Remove build artifacts and coverage files"
-run = "rm -rf .cache .coverage .coverage.* .pytest_cache .ruff_cache .ty_cache build dist htmlcov site"
+run = "rm -rf .cache .coverage .coverage.* .pytest_cache .ruff_cache .ty_cache dist htmlcov site"
 
 [tasks.upgrade]
 alias = "u"

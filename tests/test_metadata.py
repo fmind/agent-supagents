@@ -45,7 +45,7 @@ def test_user_skill_contract() -> None:
     assert not re.search(r"\]\([^)]*\.\./", body)
 
 
-def test_repo_maintainer_skills_and_claude_bridge() -> None:
+def test_repo_maintainer_skills() -> None:
     skills_root = REPO_ROOT / ".agents" / "skills"
     skill_dirs = sorted(p for p in skills_root.iterdir() if p.is_dir())
     assert [p.name for p in skill_dirs] == ["harnesses", "release"]
@@ -53,10 +53,9 @@ def test_repo_maintainer_skills_and_claude_bridge() -> None:
         fm, _ = _parse_skill(directory / "SKILL.md")
         _assert_skill_frontmatter(fm, directory.name)
 
-    bridge = REPO_ROOT / ".claude" / "skills"
-    assert bridge.is_symlink()
-    assert bridge.readlink().as_posix() == "../.agents/skills"
-    assert bridge.resolve() == skills_root.resolve()
+    retired_bridge = REPO_ROOT / ".claude" / "skills"
+    assert not retired_bridge.exists()
+    assert not retired_bridge.is_symlink()
 
 
 def test_verify_release_passes_on_repository() -> None:
