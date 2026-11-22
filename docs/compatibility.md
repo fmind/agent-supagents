@@ -1,6 +1,6 @@
 # Compatibility evidence
 
-This matrix records local checks on Linux (2026-11-22, post-v1.6.0 working tree). Host versions are observations, not minimum-version promises. CI qualifies Linux and macOS on Python 3.14, plus Linux on Python 3.12 and 3.15, separately from native hosts. Automated checks do not verify effective runtime permissions.
+This matrix records local checks on Linux (2026-11-22, v2.0.0). Host versions are observations, not minimum-version promises. CI qualifies Linux and macOS on Python 3.14, plus Linux on Python 3.12 and 3.15, separately from native hosts. Automated checks do not verify effective runtime permissions.
 
 | Target      | Host version inspected | Generated format and shared body | Native discovery              |
 | ----------- | ---------------------- | -------------------------------- | ----------------------------- |

@@ -2,6 +2,33 @@
 
 All notable changes to this project are documented in this file.
 
+## [2.0.0] - 2026-11-22
+
+### ⚠️ Breaking Changes
+
+- Separate CLI exit codes cleanly: exit `1` for operational, config, source, partial, drift, strict-warning, and I/O failures; reserve exit `2` for CLI usage errors (`argparse` / invalid flags / missing subcommand); exit `130` on `SIGINT`.
+- Require `--global`, `--yes` (`-y`), or interactive TTY confirmation before `clean` removes auto-detected global orphans (`--no-input` disables prompts).
+- Replace `typer`, `rich`, and `pydantic` with stdlib `argparse`, TTY/`NO_COLOR`/`TERM=dumb`-aware ANSI styling, and frozen `dataclasses`, leaving `ruamel.yaml` and `tomli-w` as the only runtime dependencies.
+- Rebalance source/partial parsing into `supagents.sources` (replacing internal `supagents.partials`).
+
+### 🚀 Features
+
+- Add `--json` structured output and `-q`/`--quiet` across `build`, `check`, `clean`, `init`, and `list`, plus `-h` help, `-n`/`--dry-run` on `init`, and clean `BrokenPipeError` handling that preserves non-zero failure exit codes.
+- Surface causal failing source paths and a `supagents check --strict` hint when `clean` aborts.
+
+### 🐛 Bug Fixes
+
+- Eliminate Rich `:shortcode:` emoji corruption in `--diff` and path output.
+- Deduplicate orphans by resolved path so symlinked or aliased target directories never crash `clean` on duplicate unlink.
+- Expand `~` on `project_path` in `output_dir`, fail closed on broken default config symlinks/directories/permission errors, and reject empty paths, case-colliding target keys, unhashable `format` values, and non-regular output files (including FIFOs).
+- Add `fsync`, `finally`-guarded `umask`, and `BaseException` temp-file cleanup in `atomic_write`, fix `BuildSummary.error_count` to count all target errors, and ensure malformed child target blocks suppress inherited partial targets.
+- Treat unconfigured mise shims as unavailable in `scripts/check_hosts.py` and reject duplicate version headings or invalid UTF-8 in `scripts/verify_release.py`.
+
+### 🧹 Miscellaneous
+
+- Align `mise.toml`, `lefthook.yml`, `.betterleaks.toml`, `zensical.toml`, and GitHub Actions workflows with current standards: pin `shellcheck`, add `deptry`/`pytest-socket`/`pytest-timeout`, make `mise run all` strictly read-only, smoke-test built wheels with hash-locked runtime dependencies, and add weekly `check:actions:online` + lowest-direct checks.
+- Refresh `README.md`, `docs/usage.md`, `docs/compatibility.md`, `AGENTS.md`, and `/supagent` + maintainer skills.
+
 ## [1.6.0] - 2026-11-16
 
 ### 🚀 Features

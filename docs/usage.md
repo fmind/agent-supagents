@@ -141,7 +141,7 @@ supagents check --project --strict --json
 
 ## Upgrading
 
-- **From 1.6 (upcoming 2.0 CLI contract)**: operational, config, parse, and I/O failures now exit `1`, reserving exit `2` for CLI usage errors. Auto-detected global `clean` now requires `--global`, `--yes`, or TTY confirmation. Stdlib `argparse` and `dataclasses` replaced `typer`, `rich`, and `pydantic`.
+- **From 1.6 to 2.0**: operational, config, parse, and I/O failures now exit `1`, reserving exit `2` for CLI usage errors. Auto-detected global `clean` now requires `--global`, `--yes`, or TTY confirmation. Stdlib `argparse` and `dataclasses` replaced `typer`, `rich`, and `pydantic`.
 - **From 1.5 to 1.6**: lowercase `extends` is reserved for `_*.md` partials (non-`_*` values fail with `ParseError`), `_*.md` files are excluded from concrete sources, and warnings/errors inside partials fail closed.
 - **From 1.2/1.3 to 1.4+**: `build --check` rejects obsolete outputs and missing source directories, `list` fails on invalid sources, and invalid config shapes fail closed instead of falling back to defaults.
 
